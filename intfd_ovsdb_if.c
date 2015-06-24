@@ -426,6 +426,7 @@ intfd_parse_pm_info(struct intf_pm_info *pm_info, const struct smap *ifrow_pm_in
         pm_info->intf_type = get_connector_if_type(pm_info->connector);
     } else {
         pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_ABSENT;
+        pm_info->op_connector_flags = PM_UNSUPPORTED_FLAG;
         pm_info->intf_type = INTERFACE_HW_INTF_CONFIG_INTERFACE_TYPE_UNKNOWN;
     }
 } /* intfd_parse_pm_info */
@@ -842,6 +843,11 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
             if (intf->pm_info.intf_type != new_pm_info.intf_type) {
                 cfg_changed = true;
                 intf->pm_info.intf_type = new_pm_info.intf_type;
+            }
+
+            if (intf->pm_info.op_connector_flags != new_pm_info.op_connector_flags) {
+                cfg_changed = true;
+                intf->pm_info.op_connector_flags = new_pm_info.op_connector_flags;
             }
 
             if (cfg_changed) {
