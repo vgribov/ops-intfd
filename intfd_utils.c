@@ -46,6 +46,22 @@ intfd_print_smap(const char *name, const struct smap *map)
 } /* intfd_print_smap */
 
 const char*
+intfd_get_lane_split_str(enum ovsrec_interface_user_config_lane_split_e ls)
+{
+    switch(ls) {
+    case INTERFACE_USER_CONFIG_LANE_SPLIT_NO_SPLIT:
+        return INTERFACE_USER_CONFIG_MAP_LANE_SPLIT_NO_SPLIT;
+
+    case INTERFACE_USER_CONFIG_LANE_SPLIT_SPLIT:
+        return INTERFACE_USER_CONFIG_MAP_LANE_SPLIT_SPLIT;
+
+    case INTERFACE_USER_CONFIG_LANE_SPLIT_DEFAULT:
+    default:
+        return "unset by user";
+    }
+} /* intfd_get_lane_split_str */
+
+const char*
 intfd_get_error_str(enum ovsrec_interface_error_e reason)
 {
     switch(reason) {

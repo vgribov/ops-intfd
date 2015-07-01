@@ -66,10 +66,11 @@ static bool system_configured = false;
 static struct shash all_interfaces = SHASH_INITIALIZER(&all_interfaces);
 
 struct intf_user_cfg {
-    enum ovsrec_interface_user_config_admin_e   admin_state;
-    enum ovsrec_interface_user_config_autoneg_e autoneg;
-    enum ovsrec_interface_user_config_pause_e   pause;
-    enum ovsrec_interface_user_config_duplex_e  duplex;
+    enum ovsrec_interface_user_config_admin_e      admin_state;
+    enum ovsrec_interface_user_config_autoneg_e    autoneg;
+    enum ovsrec_interface_user_config_pause_e      pause;
+    enum ovsrec_interface_user_config_duplex_e     duplex;
+    enum ovsrec_interface_user_config_lane_split_e lane_split;
 
     uint32_t    speeds;
     uint32_t    mtu;
@@ -97,10 +98,13 @@ struct intf_pm_info {
 };
 
 struct iface {
-    char                    *name;
-    struct intf_user_cfg    user_cfg;
-    struct intf_oper_state  op_state;
-    struct intf_pm_info     pm_info;
+    char                        *name;
+    struct intf_user_cfg        user_cfg;
+    struct intf_oper_state      op_state;
+    struct intf_pm_info         pm_info;
+    struct iface                *split_parent;
+    struct iface                **split_children;
+    int                         n_split_children;
 };
 
 
@@ -136,6 +140,7 @@ intfd_debug_dump(struct ds *ds, int argc, const char *argv[])
     struct shash_node *sh_node;
     bool list_all_intf = true;
     const char *interface_name;
+    int i;
 
     if (argc > 1) {
         list_all_intf = false;
@@ -179,6 +184,20 @@ intfd_debug_dump(struct ds *ds, int argc, const char *argv[])
                           interface_pm_info_connector_strings[intf->pm_info.connector]);
             ds_put_format(ds, "    hw_interface_type  : %s\n",
                           intfd_get_intf_type_str(intf->pm_info.intf_type));
+            ds_put_format(ds, "    lane_split         : %s\n",
+                          intfd_get_lane_split_str(intf->user_cfg.lane_split));
+            ds_put_format(ds, "    split_parent       : %s\n",
+                          intf->split_parent ?
+                          intf->split_parent->name : "none");
+            if (!intf->split_children) {
+                ds_put_format(ds, "    split_children     : none\n");
+            } else {
+                for (i = 0; i < intf->n_split_children; i++) {
+                    ds_put_format(ds, "    split_children[%d]  : %s\n", i,
+                                  intf->split_children[i] ?
+                                  intf->split_children[i]->name : "not found");
+                }
+            }
         }
     }
 
@@ -271,6 +290,8 @@ intfd_ovsdb_init(const char *db_path)
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_name);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_user_config);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_pm_info);
+    ovsdb_idl_add_column(idl, &ovsrec_interface_col_split_parent);
+    ovsdb_idl_add_column(idl, &ovsrec_interface_col_split_children);
 
     /* Mark the following columns write-only. */
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_error);
@@ -291,6 +312,55 @@ intfd_ovsdb_exit(void)
     }
     ovsdb_idl_destroy(idl);
 } /* intfd_ovsdb_exit */
+
+static void
+intfd_process_parent_child(struct iface *intf,
+                           const struct ovsrec_interface *ifrow)
+{
+    int i;
+
+    /* For an interface that have a parent or children, update
+     * the interface data with a pointer to the parent or children.
+     */
+    if (!ifrow->split_parent && !ifrow->split_children) {
+        /* Not a splittable port.  Nothing to do. */
+        return;
+    }
+
+    /* Handle parent pointer */
+    if (ifrow->split_parent) {
+        intf->split_parent = shash_find_data(&all_interfaces,
+                                             ifrow->split_parent->name);
+        if (!intf->split_parent) {
+            VLOG_WARN("Could not find parent ifrow->name %s in "
+                      "all_interfaces!", ifrow->split_parent->name);
+            return;
+        }
+
+        /* Children ports use the same PM info as parent. */
+        intf->pm_info = intf->split_parent->pm_info;
+
+    /* Handle children pointers */
+    } else if (ifrow->split_children) {
+        struct iface *if_child_p;
+
+        intf->split_children = xcalloc(ifrow->n_split_children,
+                                       sizeof(struct iface *));
+        for (i = 0; i < ifrow->n_split_children; i++) {
+            if_child_p = shash_find_data(&all_interfaces,
+                                         ifrow->split_children[i]->name);
+            if (!if_child_p) {
+                VLOG_WARN("Could not find child ifrow->name %s in "
+                          "all_interfaces!", ifrow->split_children[i]->name);
+                intf->split_children[i] = NULL;
+                continue;
+            }
+            intf->split_children[i] = if_child_p;
+        }
+        intf->n_split_children = ifrow->n_split_children;
+    }
+
+} /* intfd_process_parent_child */
 
 static void
 intfd_parse_user_cfg(struct intf_user_cfg *user_config,
@@ -356,6 +426,13 @@ intfd_parse_user_cfg(struct intf_user_cfg *user_config,
     data = smap_get(ifrow_config, INTERFACE_USER_CONFIG_MAP_MTU);
     if (data) {
         user_config->mtu = atoi(data);
+    }
+
+    /* user_config:lane_split */
+    user_config->lane_split = INTERFACE_USER_CONFIG_LANE_SPLIT_NO_SPLIT;
+    data = smap_get(ifrow_config, INTERFACE_USER_CONFIG_MAP_LANE_SPLIT);
+    if (data && (STR_EQ(data, INTERFACE_USER_CONFIG_MAP_LANE_SPLIT_SPLIT))) {
+        user_config->lane_split = INTERFACE_USER_CONFIG_LANE_SPLIT_SPLIT;
     }
 
 } /* intfd_parse_user_cfg */
@@ -502,6 +579,9 @@ add_new_interface(const struct ovsrec_interface *ifrow)
     intfd_parse_user_cfg(&new_intf->user_cfg, &ifrow->user_config);
     intfd_parse_pm_info(&new_intf->pm_info, &ifrow->pm_info);
 
+    /* Note: splittable port processing occurs later once
+     *       all interfaces have been added. */
+
     VLOG_DBG("Created local data structure for interface %s", ifrow->name);
 
 } /* add_new_interface */
@@ -512,6 +592,9 @@ del_old_interface(struct shash_node *sh_node)
     if (sh_node) {
         struct iface *intf = sh_node->data;
         free(intf->name);
+        if (intf->split_children) {
+            free(intf->split_children);
+        }
         free(intf);
         shash_delete(&all_interfaces, sh_node);
     }
@@ -586,8 +669,18 @@ calc_intf_op_state_n_reason(struct iface *intf)
     intf->op_state.enabled = false;
     intf->op_state.reason = INTERFACE_ERROR_UNINITIALIZED;
 
+    /* Checking for splittable primary interface & lanes_split condition. */
+    if (intf->split_children != NULL &&
+        intf->user_cfg.lane_split == INTERFACE_USER_CONFIG_LANE_SPLIT_SPLIT) {
+        intf->op_state.reason = INTERFACE_ERROR_LANES_SPLIT;
+
+    /* Checking for splittable subinterface & lanes_not_split condition. */
+    } else if (intf->split_parent != NULL &&
+               intf->split_parent->user_cfg.lane_split == INTERFACE_USER_CONFIG_LANE_SPLIT_NO_SPLIT) {
+        intf->op_state.reason = INTERFACE_ERROR_LANES_NOT_SPLIT;
+
     /* Checking admin state. */
-    if (intf->user_cfg.admin_state ==  INTERFACE_USER_CONFIG_ADMIN_DOWN) {
+    } else if (intf->user_cfg.admin_state == INTERFACE_USER_CONFIG_ADMIN_DOWN) {
         intf->op_state.reason = INTERFACE_ERROR_ADMIN_DOWN;
 
     /* Checking for missing pluggable module. */
@@ -750,7 +843,7 @@ set_interface_config(const struct ovsrec_interface *ifrow, struct iface *intf)
 
     VLOG_DBG("Received new config for interface %s", ifrow->name);
 
-    /* Figure out if intf can be enabled. */
+    /* Figure out if interface can be enabled. */
     calc_intf_op_state_n_reason(intf);
 
     if (intf->op_state.enabled == true) {
@@ -776,21 +869,24 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
 {
     int rc = 0;
     bool cfg_changed = false;
+    bool split_changed = false;
     struct intf_user_cfg new_user_cfg;
     struct intf_pm_info new_pm_info;
     struct shash_node *sh_node;
     struct iface *intf = NULL;
     const struct ovsrec_interface *ifrow = NULL;
+    struct iface **parent_list = NULL;
 
-    /* Loop through all the current interfaces and figure out how many
-     * have config changes that need action. */
+    /* Loop through all the current interfaces and handle config changes. */
     SHASH_FOR_EACH(sh_node, &all_interfaces) {
-
         cfg_changed = false;
         intf = sh_node->data;
         ifrow = shash_find_data(sh_idl_interfaces, sh_node->name);
 
         if (OVSREC_IDL_IS_ROW_INSERTED(ifrow, idl_seqno)) {
+
+            /* Update parent/child relationship if needed. */
+            intfd_process_parent_child(intf, ifrow);
 
             set_interface_config(ifrow, intf);
             rc++;
@@ -798,7 +894,15 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
         } else if (OVSREC_IDL_IS_ROW_MODIFIED(ifrow, idl_seqno)) {
 
             intfd_parse_user_cfg(&new_user_cfg, &ifrow->user_config);
-            intfd_parse_pm_info(&new_pm_info, &ifrow->pm_info);
+
+            if (!ifrow->split_parent) {
+                /* Parse this row's pm_info. */
+                intfd_parse_pm_info(&new_pm_info, &ifrow->pm_info);
+            } else {
+                /* Parse the parents row pm_info. */
+                intfd_parse_pm_info(&new_pm_info,
+                                    &ifrow->split_parent->pm_info);
+            }
 
             if (intf->user_cfg.admin_state != new_user_cfg.admin_state) {
                 cfg_changed = true;
@@ -830,6 +934,12 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
                 intf->user_cfg.speeds = new_user_cfg.speeds;
             }
 
+            if (intf->user_cfg.lane_split != new_user_cfg.lane_split) {
+                cfg_changed = true;
+                split_changed = true;
+                intf->user_cfg.lane_split = new_user_cfg.lane_split;
+            }
+
             if (intf->pm_info.connector != new_pm_info.connector) {
                 cfg_changed = true;
                 intf->pm_info.connector = new_pm_info.connector;
@@ -854,6 +964,16 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
                 /* Update interface configuration. */
                 set_interface_config(ifrow, intf);
                 rc++;
+            }
+
+            if (split_changed) {
+                int i;
+                /* Lane split status changed.  Need to
+                 * reconfigure all split children as well. */
+                for (i = 0; i < intf->n_split_children; i++) {
+                    set_interface_config(ifrow->split_children[i],
+                                         intf->split_children[i]);
+                }
             }
         }
     }
@@ -905,14 +1025,13 @@ intfd_reconfigure(void)
         }
     }
 
-    /* Check for number of interfaces that changed config--and need
-     * handling now. */
+    /* Process interface config changes. */
     rc = handle_interfaces_config_mods(&sh_idl_interfaces);
 
     /* Update idl_seqno after handling all OVSDB updates. */
     idl_seqno = new_idl_seqno;
 
-    /* Destroy the shash of the IDL interfaces */
+    /* Destroy the shash of the IDL interfaces. */
     shash_destroy(&sh_idl_interfaces);
 
     return rc;
