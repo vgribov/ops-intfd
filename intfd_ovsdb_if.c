@@ -314,55 +314,6 @@ intfd_ovsdb_exit(void)
 } /* intfd_ovsdb_exit */
 
 static void
-intfd_process_parent_child(struct iface *intf,
-                           const struct ovsrec_interface *ifrow)
-{
-    int i;
-
-    /* For an interface that have a parent or children, update
-     * the interface data with a pointer to the parent or children.
-     */
-    if (!ifrow->split_parent && !ifrow->split_children) {
-        /* Not a splittable port.  Nothing to do. */
-        return;
-    }
-
-    /* Handle parent pointer */
-    if (ifrow->split_parent) {
-        intf->split_parent = shash_find_data(&all_interfaces,
-                                             ifrow->split_parent->name);
-        if (!intf->split_parent) {
-            VLOG_WARN("Could not find parent ifrow->name %s in "
-                      "all_interfaces!", ifrow->split_parent->name);
-            return;
-        }
-
-        /* Children ports use the same PM info as parent. */
-        intf->pm_info = intf->split_parent->pm_info;
-
-    /* Handle children pointers */
-    } else if (ifrow->split_children) {
-        struct iface *if_child_p;
-
-        intf->split_children = xcalloc(ifrow->n_split_children,
-                                       sizeof(struct iface *));
-        for (i = 0; i < ifrow->n_split_children; i++) {
-            if_child_p = shash_find_data(&all_interfaces,
-                                         ifrow->split_children[i]->name);
-            if (!if_child_p) {
-                VLOG_WARN("Could not find child ifrow->name %s in "
-                          "all_interfaces!", ifrow->split_children[i]->name);
-                intf->split_children[i] = NULL;
-                continue;
-            }
-            intf->split_children[i] = if_child_p;
-        }
-        intf->n_split_children = ifrow->n_split_children;
-    }
-
-} /* intfd_process_parent_child */
-
-static void
 intfd_parse_user_cfg(struct intf_user_cfg *user_config,
                      const struct smap *ifrow_config)
 {
@@ -438,7 +389,7 @@ intfd_parse_user_cfg(struct intf_user_cfg *user_config,
 } /* intfd_parse_user_cfg */
 
 static void
-intfd_parse_pm_info(struct intf_pm_info *pm_info, const struct smap *ifrow_pm_info)
+intfd_parse_pm_info(struct intf_pm_info *pm_info, const struct smap *ifrow_pm_info, bool split_child)
 {
     const char *data = NULL;
 
@@ -460,14 +411,23 @@ intfd_parse_pm_info(struct intf_pm_info *pm_info, const struct smap *ifrow_pm_in
 
         data = smap_get(ifrow_pm_info, INTERFACE_PM_INFO_MAP_CONNECTOR);
         if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_QSFP_CR4))) {
-            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_QSFP_CR4;
-
+            if (split_child) {
+                pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_DAC;
+            } else {
+                pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_QSFP_CR4;
+            }
         } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_QSFP_LR4))) {
-            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_QSFP_LR4;
-
+            if (split_child) {
+                pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_LR;
+            } else {
+                pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_QSFP_LR4;
+            }
         } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_QSFP_SR4))) {
-            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_QSFP_SR4;
-
+            if (split_child) {
+                pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_SR;
+            } else {
+                pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_QSFP_SR4;
+            }
         } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_CX))) {
             pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_CX;
 
@@ -507,6 +467,55 @@ intfd_parse_pm_info(struct intf_pm_info *pm_info, const struct smap *ifrow_pm_in
         pm_info->intf_type = INTERFACE_HW_INTF_CONFIG_INTERFACE_TYPE_UNKNOWN;
     }
 } /* intfd_parse_pm_info */
+
+static void
+intfd_process_parent_child(struct iface *intf,
+                           const struct ovsrec_interface *ifrow)
+{
+    int i;
+
+    /* For an interface that have a parent or children, update
+     * the interface data with a pointer to the parent or children.
+     */
+    if (!ifrow->split_parent && !ifrow->split_children) {
+        /* Not a splittable port.  Nothing to do. */
+        return;
+    }
+
+    /* Handle parent pointer */
+    if (ifrow->split_parent) {
+        intf->split_parent = shash_find_data(&all_interfaces,
+                                             ifrow->split_parent->name);
+        if (!intf->split_parent) {
+            VLOG_WARN("Could not find parent ifrow->name %s in "
+                      "all_interfaces!", ifrow->split_parent->name);
+            return;
+        }
+
+        /* Children ports take PM info from their parent. */
+        intfd_parse_pm_info(&(intf->pm_info), &(ifrow->split_parent->pm_info), true);
+
+    /* Handle children pointers */
+    } else if (ifrow->split_children) {
+        struct iface *if_child_p;
+
+        intf->split_children = xcalloc(ifrow->n_split_children,
+                                       sizeof(struct iface *));
+        for (i = 0; i < ifrow->n_split_children; i++) {
+            if_child_p = shash_find_data(&all_interfaces,
+                                         ifrow->split_children[i]->name);
+            if (!if_child_p) {
+                VLOG_WARN("Could not find child ifrow->name %s in "
+                          "all_interfaces!", ifrow->split_children[i]->name);
+                intf->split_children[i] = NULL;
+                continue;
+            }
+            intf->split_children[i] = if_child_p;
+        }
+        intf->n_split_children = ifrow->n_split_children;
+    }
+
+} /* intfd_process_parent_child */
 
 static void
 set_op_state_pause(struct iface *intf)
@@ -576,8 +585,8 @@ add_new_interface(const struct ovsrec_interface *ifrow)
 
     new_intf->name = xstrdup(ifrow->name);
 
-    intfd_parse_user_cfg(&new_intf->user_cfg, &ifrow->user_config);
-    intfd_parse_pm_info(&new_intf->pm_info, &ifrow->pm_info);
+    intfd_parse_user_cfg(&(new_intf->user_cfg), &(ifrow->user_config));
+    intfd_parse_pm_info(&(new_intf->pm_info), &(ifrow->pm_info), false);
 
     /* Note: splittable port processing occurs later once
      *       all interfaces have been added. */
@@ -870,6 +879,7 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
     int rc = 0;
     bool cfg_changed = false;
     bool split_changed = false;
+    bool pm_info_changed = false;
     struct intf_user_cfg new_user_cfg;
     struct intf_pm_info new_pm_info;
     struct shash_node *sh_node;
@@ -897,11 +907,11 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
 
             if (!ifrow->split_parent) {
                 /* Parse this row's pm_info. */
-                intfd_parse_pm_info(&new_pm_info, &ifrow->pm_info);
+                intfd_parse_pm_info(&new_pm_info, &(ifrow->pm_info), false);
             } else {
-                /* Parse the parents row pm_info. */
+                /* Parse the parent's row's pm_info. */
                 intfd_parse_pm_info(&new_pm_info,
-                                    &ifrow->split_parent->pm_info);
+                                    &(ifrow->split_parent->pm_info), true);
             }
 
             if (intf->user_cfg.admin_state != new_user_cfg.admin_state) {
@@ -942,6 +952,7 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
 
             if (intf->pm_info.connector != new_pm_info.connector) {
                 cfg_changed = true;
+                pm_info_changed = true;
                 intf->pm_info.connector = new_pm_info.connector;
             }
 
@@ -964,6 +975,17 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
                 /* Update interface configuration. */
                 set_interface_config(ifrow, intf);
                 rc++;
+            }
+
+            /* If parent port's connector is changed, pass on
+             * the change to split children. */
+            if (pm_info_changed && ifrow->split_children) {
+                int i;
+                for (i = 0; i < intf->n_split_children; i++) {
+                    intfd_parse_pm_info(&(intf->split_children[i]->pm_info),
+                                        &(ifrow->pm_info), true);
+                }
+                split_changed = true;
             }
 
             if (split_changed) {
