@@ -389,7 +389,7 @@ intfd_parse_user_cfg(struct intf_user_cfg *user_config,
 } /* intfd_parse_user_cfg */
 
 static void
-intfd_parse_pm_info(struct intf_pm_info *pm_info, const struct smap *ifrow_pm_info, bool split_child)
+intfd_parse_split_pm_info(struct intf_pm_info *pm_info, const struct smap *ifrow_pm_info)
 {
     const char *data = NULL;
 
@@ -404,68 +404,92 @@ intfd_parse_pm_info(struct intf_pm_info *pm_info, const struct smap *ifrow_pm_in
         pm_info->connector_status = INTERFACE_PM_INFO_CONNECTOR_STATUS_SUPPORTED;
     }
 
-    if (pm_info->connector_status == INTERFACE_PM_INFO_CONNECTOR_STATUS_SUPPORTED) {
+    data = smap_get(ifrow_pm_info, INTERFACE_PM_INFO_MAP_CONNECTOR);
+    if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_QSFP_CR4))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_DAC;
 
-        /* pm_info:connector */
-        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_UNKNOWN;
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_QSFP_LR4))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_LR;
 
-        data = smap_get(ifrow_pm_info, INTERFACE_PM_INFO_MAP_CONNECTOR);
-        if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_QSFP_CR4))) {
-            if (split_child) {
-                pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_DAC;
-            } else {
-                pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_QSFP_CR4;
-            }
-        } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_QSFP_LR4))) {
-            if (split_child) {
-                pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_LR;
-            } else {
-                pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_QSFP_LR4;
-            }
-        } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_QSFP_SR4))) {
-            if (split_child) {
-                pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_SR;
-            } else {
-                pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_QSFP_SR4;
-            }
-        } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_CX))) {
-            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_CX;
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_QSFP_SR4))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_SR;
 
-        } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_DAC))) {
-            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_DAC;
-
-        } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_FC))) {
-            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_FC;
-
-        } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_LR))) {
-            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_LR;
-
-        } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_LRM))) {
-            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_LRM;
-
-        } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_LX))) {
-            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_LX;
-
-        } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_RJ45))) {
-            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_RJ45;
-
-        } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_SR))) {
-            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_SR;
-
-        } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_SX))) {
-            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_SX;
-
-        } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_ABSENT))) {
-            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_ABSENT;
-        }
-
-        pm_info->op_connector_flags = get_connector_flags(pm_info->connector);
-        pm_info->intf_type = get_connector_if_type(pm_info->connector);
-    } else {
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_ABSENT))) {
         pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_ABSENT;
-        pm_info->op_connector_flags = PM_UNSUPPORTED_FLAG;
-        pm_info->intf_type = INTERFACE_HW_INTF_CONFIG_INTERFACE_TYPE_UNKNOWN;
+
+    } else {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_UNKNOWN;
+        pm_info->connector_status = INTERFACE_PM_INFO_CONNECTOR_STATUS_UNSUPPORTED;
     }
+
+    pm_info->op_connector_flags = get_connector_flags(pm_info->connector);
+    pm_info->intf_type = get_connector_if_type(pm_info->connector);
+
+} /* intfd_parse_split_pm_info */
+
+static void
+intfd_parse_pm_info(struct intf_pm_info *pm_info, const struct smap *ifrow_pm_info)
+{
+    const char *data = NULL;
+
+    /* pm_info:connector_status */
+    pm_info->connector_status = INTERFACE_PM_INFO_CONNECTOR_STATUS_UNRECOGNIZED;
+
+    data = smap_get(ifrow_pm_info, INTERFACE_PM_INFO_MAP_CONNECTOR_STATUS);
+    if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_STATUS_UNSUPPORTED))) {
+        pm_info->connector_status = INTERFACE_PM_INFO_CONNECTOR_STATUS_UNSUPPORTED;
+
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_STATUS_SUPPORTED))) {
+        pm_info->connector_status = INTERFACE_PM_INFO_CONNECTOR_STATUS_SUPPORTED;
+    }
+
+    /* pm_info:connector */
+    pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_UNKNOWN;
+
+    data = smap_get(ifrow_pm_info, INTERFACE_PM_INFO_MAP_CONNECTOR);
+    if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_QSFP_CR4))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_QSFP_CR4;
+
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_QSFP_LR4))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_QSFP_LR4;
+
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_QSFP_SR4))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_QSFP_SR4;
+
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_CX))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_CX;
+
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_DAC))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_DAC;
+
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_FC))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_FC;
+
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_LR))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_LR;
+
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_LRM))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_LRM;
+
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_LX))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_LX;
+
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_RJ45))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_RJ45;
+
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_SR))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_SR;
+
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_SFP_SX))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_SX;
+
+    } else if (data && (STR_EQ(data, OVSREC_INTERFACE_PM_INFO_CONNECTOR_ABSENT))) {
+        pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_ABSENT;
+    }
+
+    pm_info->op_connector_flags = get_connector_flags(pm_info->connector);
+    pm_info->intf_type = get_connector_if_type(pm_info->connector);
+
 } /* intfd_parse_pm_info */
 
 static void
@@ -493,7 +517,7 @@ intfd_process_parent_child(struct iface *intf,
         }
 
         /* Children ports take PM info from their parent. */
-        intfd_parse_pm_info(&(intf->pm_info), &(ifrow->split_parent->pm_info), true);
+        intfd_parse_split_pm_info(&(intf->pm_info), &(ifrow->split_parent->pm_info));
 
     /* Handle children pointers */
     } else if (ifrow->split_children) {
@@ -586,7 +610,7 @@ add_new_interface(const struct ovsrec_interface *ifrow)
     new_intf->name = xstrdup(ifrow->name);
 
     intfd_parse_user_cfg(&(new_intf->user_cfg), &(ifrow->user_config));
-    intfd_parse_pm_info(&(new_intf->pm_info), &(ifrow->pm_info), false);
+    intfd_parse_pm_info(&(new_intf->pm_info), &(ifrow->pm_info));
 
     /* Note: splittable port processing occurs later once
      *       all interfaces have been added. */
@@ -907,11 +931,10 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
 
             if (!ifrow->split_parent) {
                 /* Parse this row's pm_info. */
-                intfd_parse_pm_info(&new_pm_info, &(ifrow->pm_info), false);
+                intfd_parse_pm_info(&new_pm_info, &(ifrow->pm_info));
             } else {
                 /* Parse the parent's row's pm_info. */
-                intfd_parse_pm_info(&new_pm_info,
-                                    &(ifrow->split_parent->pm_info), true);
+                intfd_parse_split_pm_info(&new_pm_info, &(ifrow->split_parent->pm_info));
             }
 
             if (intf->user_cfg.admin_state != new_user_cfg.admin_state) {
@@ -982,8 +1005,8 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
             if (pm_info_changed && ifrow->split_children) {
                 int i;
                 for (i = 0; i < intf->n_split_children; i++) {
-                    intfd_parse_pm_info(&(intf->split_children[i]->pm_info),
-                                        &(ifrow->pm_info), true);
+                    intfd_parse_split_pm_info(&(intf->split_children[i]->pm_info),
+                                              &(ifrow->pm_info));
                 }
                 split_changed = true;
             }
