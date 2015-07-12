@@ -28,6 +28,8 @@ from halonvsi.halon import *
 OVS_VSCTL = "/usr/bin/ovs-vsctl "
 
 # In X86 config Interface 50 is Splittable port.
+fixed_intf = "1"
+test_intf = "21"
 split_parent = '50'
 split_children = ['50-1', '50-2', '50-3', '50-4']
 
@@ -97,21 +99,21 @@ class intfdTest(HalonTest):
         info("\n============= intfd user config tests =============\n")
         s1 = self.net.switches[0]
 
-        info("Verify that interface '1' is present in the DB.\n")
-        out = s1.cmd("/usr/bin/ovs-vsctl list interface 1")
+        info("Verify that interface " + test_intf + " is present in the DB.\n")
+        out = s1.cmd("/usr/bin/ovs-vsctl list interface " + test_intf )
         if '_uuid' not in out:
             info(out)
-            assert 0, "Unable to find Interface '1' in OVSBD.\n"
+            assert 0, "Unable to find Interface " + test_intf + " in OVSBD.\n"
 
-        # Set admin state as 'up' for interface 1.
-        sw_set_intf_user_config(s1, 1, ['admin=up'])
+        # Set admin state as 'up'.
+        sw_set_intf_user_config(s1, test_intf, ['admin=up'])
         short_sleep()
 
         # Verify that 'error' column in interface table is
         # set to 'module_missing' due to absense of pluggable module.
         # Verify that hw_intf_config:enable is still set to 'false'.
         info("Verify that 'error' is set to 'module_missing'\n")
-        err, hw_enable = sw_get_intf_state(s1, 1, ['error', 'hw_intf_config:enable'])
+        err, hw_enable = sw_get_intf_state(s1, test_intf, ['error', 'hw_intf_config:enable'])
         if err != 'module_missing' or hw_enable != 'false':
             assert 0, "Expected the interface " \
                       "'error' status to be 'module_missing', and " \
@@ -119,15 +121,16 @@ class intfdTest(HalonTest):
                       "but they are error = %s, hw_intf_config:enable = %s." \
                       % (err, hw_enable)
 
-        # Set admin state as 'down' for interface 1.
-        sw_set_intf_user_config(s1, 1, ['admin=down'])
+        # Set admin state as 'down'.
+        sw_set_intf_user_config(s1, test_intf, ['admin=down'])
         short_sleep()
 
         # Verify that 'error' column in interface table is
-        # set to 'admin_down' as port is disabled by user.
+        # set to 'admin_down' as interface is disabled by user.
         # Verify that hw_intf_config:enable is still set to 'false'.
-        info("Verify that 'error' is set to 'admin_down' when admin=down without other params set\n")
-        err, hw_enable = sw_get_intf_state(s1, 1, ['error', 'hw_intf_config:enable'])
+        info("Verify that 'error' is set to 'admin_down' when " \
+             "user_config:admin=down without other params set\n")
+        err, hw_enable = sw_get_intf_state(s1, test_intf, ['error', 'hw_intf_config:enable'])
         if err != 'admin_down' or hw_enable != 'false':
             assert 0, "Expected the interface " \
                       "'error' status to be 'admin_down', " \
@@ -137,8 +140,9 @@ class intfdTest(HalonTest):
 
         # Set the complete user_config, but leave the admin=down,
         # verify that still interface hardware_intf_config:enable=false
-        sw_set_intf_user_config(s1, 1, ['admin=down', 'autoneg=on', 'speeds=1000', \
-                                        'duplex=full', 'pause=rxtx', 'mtu=1500' ])
+        sw_set_intf_user_config(s1, test_intf, ['admin=down', 'autoneg=on', \
+                                                'speeds=1000', 'duplex=full', \
+                                                'pause=rxtx', 'mtu=1500' ])
         short_sleep()
 
         # Verify that 'error' column in interface table is
@@ -146,7 +150,7 @@ class intfdTest(HalonTest):
         # Verify that hw_intf_config:enable is still set to 'false'.
         info("Verify that 'error' is set to 'admin_down' when admin=down " \
              "and other params are set to valid values.\n")
-        err, hw_enable = sw_get_intf_state(s1, 1, ['error', 'hw_intf_config:enable'])
+        err, hw_enable = sw_get_intf_state(s1, test_intf, ['error', 'hw_intf_config:enable'])
         if err != 'admin_down' or hw_enable != 'false':
             assert 0, "Expected the interface " \
                       "'error' status to be 'admin_down', " \
@@ -154,11 +158,11 @@ class intfdTest(HalonTest):
                       "but they are error = %s, hw_intf_config:enable = %s." \
                       % (err, hw_enable)
 
-        # Clear the user_config of interface 1.
-        sw_clear_user_config(s1, 1)
+        # Clear the user_config
+        sw_clear_user_config(s1, test_intf)
 
         # Verify that interface is still disabled.
-        err, hw_enable = sw_get_intf_state(s1, 1, ['error', 'hw_intf_config:enable'])
+        err, hw_enable = sw_get_intf_state(s1, test_intf, ['error', 'hw_intf_config:enable'])
         if err != 'admin_down' or hw_enable != 'false':
             assert 0, "Expected the interface " \
                       "'error' status to be 'admin_down', " \
@@ -174,24 +178,24 @@ class intfdTest(HalonTest):
         info("\n============= intfd pm_info detect tests =============\n")
         s1 = self.net.switches[0]
 
-        # Enable the interface 1, and set the pm_info to valid values.
-        sw_set_intf_user_config(s1, 1, ['admin=up'])
-        sw_set_intf_pm_info(s1, 1, ('connector=SFP_RJ45', 'connector_status=supported'))
+        # Enable the interface, and set the pm_info to valid values.
+        sw_set_intf_user_config(s1, test_intf, ['admin=up'])
+        sw_set_intf_pm_info(s1, test_intf, ('connector=SFP_RJ45', 'connector_status=supported'))
         short_sleep()
 
         # Make sure that 'error' status is not 'module_missing'
         info("Verify that interface pluggable module status is correctly detected.\n")
-        err = sw_get_intf_state(s1, 1, ['error'])
+        err = sw_get_intf_state(s1, test_intf, ['error'])
         if 'module_missing' == err:
             assert 0, "Expected the interface error column value is not equal to 'module_missing'"
 
         # Set pm_info:connector as 'absent'
-        sw_set_intf_pm_info(s1, 1, ('connector=absent', 'connector_status=unrecognized'))
+        sw_set_intf_pm_info(s1, test_intf, ('connector=absent', 'connector_status=unrecognized'))
         short_sleep()
 
         # Make sure that 'error' status is set to 'module_missing'
         info("Verify that pluggable module removal is correctly detected.\n")
-        err, hw_enable = sw_get_intf_state(s1, 1, ['error', 'hw_intf_config:enable'])
+        err, hw_enable = sw_get_intf_state(s1, test_intf, ['error', 'hw_intf_config:enable'])
         if err != 'module_missing' or hw_enable != 'false':
             assert 0, "Expected the interface " \
                       "'error' status to be 'module_missing', " \
@@ -200,20 +204,20 @@ class intfdTest(HalonTest):
                       % (err, hw_enable)
 
         # Set pm_info:connector as 'unknown' and connector_status=unrecognized
-        sw_set_intf_pm_info(s1, 1, ('connector=unknown', 'connector_status=unrecognized'))
+        sw_set_intf_pm_info(s1, test_intf, ('connector=unknown', 'connector_status=unrecognized'))
         short_sleep()
 
         info("Verify that when connector_status=unrecognized, error is module_unrecognized.\n")
-        err, hw_enable = sw_get_intf_state(s1, 1, ['error', 'hw_intf_config:enable'])
+        err, hw_enable = sw_get_intf_state(s1, test_intf, ['error', 'hw_intf_config:enable'])
         assert err == 'module_unrecognized' and hw_enable == 'false', \
                "Invalid interface status when unrecognized pluggable module is inserted"
 
         # Set pm_info:connector as 'unknown' and connector_status=unsupported
-        sw_set_intf_pm_info(s1, 1, ('connector=unknown', 'connector_status=unsupported'))
+        sw_set_intf_pm_info(s1, test_intf, ('connector=unknown', 'connector_status=unsupported'))
         short_sleep()
 
         info("Verify that when connector_status=unsupported, error is module_unsupported.\n")
-        err, hw_enable = sw_get_intf_state(s1, 1, ['error', 'hw_intf_config:enable'])
+        err, hw_enable = sw_get_intf_state(s1, test_intf, ['error', 'hw_intf_config:enable'])
         assert err == 'module_unsupported' and hw_enable == 'false', \
                "Invalid interface status when unsupported pluggable module is inserted"
 
@@ -226,12 +230,12 @@ class intfdTest(HalonTest):
             'SFP_DAC' : '10GBASE_CR' }
 
         for pm_type,intf_type in pm_intf_type.items():
-            sw_set_intf_pm_info(s1, 1, ['connector=' + pm_type, 'connector_status=supported'])
+            sw_set_intf_pm_info(s1, test_intf, ['connector=' + pm_type, 'connector_status=supported'])
             short_sleep()
 
             info("Verify that 'hw_intf_config:interface_type' is set to " + intf_type + \
                  " when connector=" + pm_type + "\n")
-            out = sw_get_intf_state(s1, 1, ['hw_intf_config:interface_type'])
+            out = sw_get_intf_state(s1, test_intf, ['hw_intf_config:interface_type'])
             assert intf_type == out, "hw_intf_type configuration in hw_intf_config is wrong."
 
         # In X86 config Interface 50 is Splittable port.
@@ -291,8 +295,8 @@ class intfdTest(HalonTest):
                        "Split children should not be enabled when non QSFP module is inserted."
 
         # Clear the OVSDB config of the interfaces
-        sw_clear_user_config(s1, 1)
-        sw_set_intf_pm_info(s1, 1, ('connector=absent', 'connector_status=unsupported'))
+        sw_clear_user_config(s1, test_intf)
+        sw_set_intf_pm_info(s1, test_intf, ('connector=absent', 'connector_status=unsupported'))
 
         sw_clear_user_config(s1, split_parent);
         sw_set_intf_pm_info(s1, split_parent, ('connector=absent', 'connector_status=unsupported'))
@@ -306,7 +310,7 @@ class intfdTest(HalonTest):
         info("\n============= intfd user config autoneg tests =============\n")
         s1 = self.net.switches[0]
 
-        sw_set_intf_user_config(s1, 2, ['admin=up'])
+        sw_set_intf_user_config(s1, test_intf, ['admin=up'])
         sw_set_intf_user_config(s1, split_parent, ['admin=up', 'lane_split=no-split'])
 
         pm_autoneg = {
@@ -317,12 +321,12 @@ class intfdTest(HalonTest):
             'SFP_DAC' : 'off' }
 
         for pm_type, autoneg in pm_autoneg.items():
-            sw_set_intf_pm_info(s1, 2, ["connector=" + pm_type, 'connector_status=supported'])
+            sw_set_intf_pm_info(s1, test_intf, ["connector=" + pm_type, 'connector_status=supported'])
             short_sleep()
 
             info("Verify that 'hw_intf_config:autoneg' is set to " + autoneg + \
                  " when connector=" + pm_type + "\n")
-            out = sw_get_intf_state(s1, 2, ['hw_intf_config:autoneg'])
+            out = sw_get_intf_state(s1, test_intf, ['hw_intf_config:autoneg'])
             assert autoneg == out, "Autoneg configuration in hw_intf_config is wrong."
 
         pm_autoneg = {
@@ -363,9 +367,9 @@ class intfdTest(HalonTest):
                 out = sw_get_intf_state(s1, child_port, ['hw_intf_config:autoneg'])
                 assert autoneg == out, "Autgoneg configuration in hw_intf_config is wrong for split child."
 
-        # clear the OVSDB config of the interface 2
-        sw_clear_user_config(s1, 2)
-        sw_set_intf_pm_info(s1, 2, ('connector=absent', 'connector_status=unsupported'))
+        # clear the OVSDB config of the interface.
+        sw_clear_user_config(s1, test_intf)
+        sw_set_intf_pm_info(s1, test_intf, ('connector=absent', 'connector_status=unsupported'))
 
         # clear the OVSDB config of the interface 50
         sw_clear_user_config(s1, split_parent)
@@ -378,23 +382,23 @@ class intfdTest(HalonTest):
         s1 = self.net.switches[0]
 
         # Set user_config & pm_info to valid values.
-        sw_set_intf_user_config(s1, 2, ['admin=up'])
-        sw_set_intf_pm_info(s1, 2, ('connector=SFP_RJ45', 'connector_status=supported'))
+        sw_set_intf_user_config(s1, test_intf, ['admin=up'])
+        sw_set_intf_pm_info(s1, test_intf, ('connector=SFP_RJ45', 'connector_status=supported'))
         short_sleep()
 
         pause_values = ('none', 'rx', 'tx', 'rxtx')
 
         for val in pause_values:
             info("Testing user_config:pause parameter with %s\n" % val)
-            sw_set_intf_user_config(s1, 2, ["pause=%s" % val])
+            sw_set_intf_user_config(s1, test_intf, ["pause=%s" % val])
             short_sleep()
 
-            out = sw_get_intf_state(s1, 2, ['hw_intf_config:pause'])
+            out = sw_get_intf_state(s1, test_intf, ['hw_intf_config:pause'])
             assert val == out, "pause configuration in hw_intf_config is wrong for pause=%s\n" % val
 
-        # Clear the OVSDB config of the interface 2
-        sw_clear_user_config(s1, 2)
-        sw_set_intf_pm_info(s1, 2, ('connector=absent', 'connector_status=unsupported'))
+        # Clear the OVSDB config of the interface.
+        sw_clear_user_config(s1, test_intf)
+        sw_set_intf_pm_info(s1, test_intf, ('connector=absent', 'connector_status=unsupported'))
 
 
     def user_config_speeds(self):
@@ -479,6 +483,37 @@ class intfdTest(HalonTest):
         for child_port in split_children:
             sw_clear_user_config(s1, child_port);
 
+    def fixed_1G_fixed_ports(self):
+
+        info("\n============= intfd fixed 1G ports tests =============\n")
+        s1 = self.net.switches[0]
+
+        # In VSI environment interfaces 1 - 10 are supposed to be fixed,
+        # without any pluggable modules. If not skip this test.
+        is_pluggable, connector = sw_get_intf_state(s1, fixed_intf, ['hw_intf_info:pluggable', \
+                                                                     'hw_intf_info:connector'])
+        if is_pluggable != 'false' or connector != 'RJ45':
+            info("Interface " + fixed_intf + " is not fixed RJ45 connector as expected. Skipping tests.")
+            return
+
+        # The default state of these interfaces should be 'admin_down'
+        err =  sw_get_intf_state(s1, fixed_intf, ['error'])
+        assert err == 'admin_down', "The default state of fixed interface is wrong."
+
+        # Enable the interface it should come up.
+        sw_set_intf_user_config(s1, fixed_intf, ['admin=up'])
+
+        hw_enable, autoneg, intf_type = sw_get_intf_state(s1, fixed_intf, \
+                                                          ['hw_intf_config:enable', \
+                                                           'hw_intf_config:autoneg', \
+                                                           'hw_intf_config:interface_type'])
+        info("Verify that fixed interfaces can come up without any pluggable info.\n")
+        assert hw_enable == 'true' and autoneg == 'on' and intf_type == '1GBASE_T', \
+               "Incorrect hw_intf_config state of fixed interface after enabling it."
+
+        # Clear the user_config.
+        sw_clear_user_config(s1, fixed_intf)
+
 
 class Test_intfd:
 
@@ -531,3 +566,6 @@ class Test_intfd:
 
     def test_intfd_user_config_qsfp_splitter(self):
         self.test.user_config_qsfp_splitter()
+
+    def test_intfd_1G_fixed_ports(self):
+        self.test.fixed_1G_fixed_ports()

@@ -65,6 +65,11 @@ static bool system_configured = false;
 /* Mapping of all the interfaces. */
 static struct shash all_interfaces = SHASH_INITIALIZER(&all_interfaces);
 
+struct intf_hw_info {
+    bool is_pluggable;
+    enum ovsrec_interface_hw_intf_connector_e      connector;
+};
+
 struct intf_user_cfg {
     enum ovsrec_interface_user_config_admin_e      admin_state;
     enum ovsrec_interface_user_config_autoneg_e    autoneg;
@@ -99,6 +104,7 @@ struct intf_pm_info {
 
 struct iface {
     char                        *name;
+    struct intf_hw_info         hw_info;
     struct intf_user_cfg        user_cfg;
     struct intf_oper_state      op_state;
     struct intf_pm_info         pm_info;
@@ -293,6 +299,9 @@ intfd_ovsdb_init(const char *db_path)
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_split_parent);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_split_children);
 
+    ovsdb_idl_add_column(idl, &ovsrec_interface_col_hw_intf_info);
+    ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_hw_intf_info);
+
     /* Mark the following columns write-only. */
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_error);
     ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_error);
@@ -312,6 +321,39 @@ intfd_ovsdb_exit(void)
     }
     ovsdb_idl_destroy(idl);
 } /* intfd_ovsdb_exit */
+
+static void
+intfd_parse_hw_info(struct intf_hw_info *hw_info,
+                    const struct smap *ifrow_hw_info)
+{
+    const char *data = NULL;
+
+    /* hw_info:pluggable */
+    hw_info->is_pluggable = false;
+
+    /* Check if the interface is pluggable. */
+    data = smap_get(ifrow_hw_info, INTERFACE_HW_INTF_INFO_MAP_PLUGGABLE);
+    if (data && (STR_EQ(data, INTERFACE_HW_INTF_INFO_MAP_PLUGGABLE_TRUE))) {
+        hw_info->is_pluggable = true;
+    }
+
+    /* hw_info:connector */
+    hw_info->connector = INTERFACE_HW_INTF_INFO_CONNECTOR_UNKNOWN;
+
+    /* Check the connector type. */
+    data = smap_get(ifrow_hw_info, INTERFACE_HW_INTF_INFO_MAP_CONNECTOR);
+    if (data && (STR_EQ(data, INTERFACE_HW_INTF_INFO_MAP_CONNECTOR_RJ45))) {
+        hw_info->connector = INTERFACE_HW_INTF_INFO_CONNECTOR_RJ45;
+
+    } else if (data && (STR_EQ(data, INTERFACE_HW_INTF_INFO_MAP_CONNECTOR_SFP_PLUS))) {
+        hw_info->connector = INTERFACE_HW_INTF_INFO_CONNECTOR_SFP_PLUS;
+
+    } else if (data && (STR_EQ(data, INTERFACE_HW_INTF_INFO_MAP_CONNECTOR_QSFP_PLUS))) {
+        hw_info->connector = INTERFACE_HW_INTF_INFO_CONNECTOR_QSFP_PLUS;
+
+    }
+
+} /* intfd_parse_hw_info */
 
 static void
 intfd_parse_user_cfg(struct intf_user_cfg *user_config,
@@ -428,9 +470,34 @@ intfd_parse_split_pm_info(struct intf_pm_info *pm_info, const struct smap *ifrow
 } /* intfd_parse_split_pm_info */
 
 static void
-intfd_parse_pm_info(struct intf_pm_info *pm_info, const struct smap *ifrow_pm_info)
+intfd_parse_pm_info(struct intf_hw_info *hw_info, struct intf_pm_info *pm_info,
+                    const struct smap *ifrow_pm_info)
 {
     const char *data = NULL;
+
+    /* If the interface is a fixed port (non-pluggable). */
+    if (hw_info->is_pluggable == false) {
+
+        pm_info->connector_status = INTERFACE_PM_INFO_CONNECTOR_STATUS_SUPPORTED;
+
+        /* Currently intfd only cares about non-pluggable fixed ports of type RJ45.
+         * All other connector types are pluggable, and for them
+         * pm_info will give the details about the pluggable module.
+         */
+        if (hw_info->connector == INTERFACE_HW_INTF_INFO_CONNECTOR_RJ45) {
+            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_SFP_RJ45;
+
+        } else {
+            pm_info->connector = INTERFACE_PM_INFO_CONNECTOR_UNKNOWN;
+            pm_info->connector_status = INTERFACE_PM_INFO_CONNECTOR_STATUS_UNRECOGNIZED;
+        }
+
+        pm_info->op_connector_flags = get_connector_flags(pm_info->connector);
+        pm_info->intf_type = get_connector_if_type(pm_info->connector);
+
+        return;
+    }
+
 
     /* pm_info:connector_status */
     pm_info->connector_status = INTERFACE_PM_INFO_CONNECTOR_STATUS_UNRECOGNIZED;
@@ -609,8 +676,9 @@ add_new_interface(const struct ovsrec_interface *ifrow)
 
     new_intf->name = xstrdup(ifrow->name);
 
+    intfd_parse_hw_info(&(new_intf->hw_info), &(ifrow->hw_intf_info));
     intfd_parse_user_cfg(&(new_intf->user_cfg), &(ifrow->user_config));
-    intfd_parse_pm_info(&(new_intf->pm_info), &(ifrow->pm_info));
+    intfd_parse_pm_info(&(new_intf->hw_info), &(new_intf->pm_info), &(ifrow->pm_info));
 
     /* Note: splittable port processing occurs later once
      *       all interfaces have been added. */
@@ -931,7 +999,7 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
 
             if (!ifrow->split_parent) {
                 /* Parse this row's pm_info. */
-                intfd_parse_pm_info(&new_pm_info, &(ifrow->pm_info));
+                intfd_parse_pm_info(&(intf->hw_info), &new_pm_info, &(ifrow->pm_info));
             } else {
                 /* Parse the parent's row's pm_info. */
                 intfd_parse_split_pm_info(&new_pm_info, &(ifrow->split_parent->pm_info));
