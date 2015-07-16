@@ -20,6 +20,9 @@ cmake_minimum_required (VERSION 2.8)
 set (INTFD intfd)
 project (${INTFD})
 
+# Define compile flags
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -Wall -Werror")
+
 include(FindPkgConfig)
 pkg_check_modules(CONFIG_YAML config-yaml)
 pkg_check_modules(HALONUTILS halonutils)

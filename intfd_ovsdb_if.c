@@ -977,7 +977,6 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
     struct shash_node *sh_node;
     struct iface *intf = NULL;
     const struct ovsrec_interface *ifrow = NULL;
-    struct iface **parent_list = NULL;
 
     /* Loop through all the current interfaces and handle config changes. */
     SHASH_FOR_EACH(sh_node, &all_interfaces) {
