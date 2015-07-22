@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 
 #include <config.h>
 #include <command-line.h>
@@ -68,6 +69,9 @@ static struct shash all_interfaces = SHASH_INITIALIZER(&all_interfaces);
 struct intf_hw_info {
     bool is_pluggable;
     enum ovsrec_interface_hw_intf_connector_e      connector;
+    uint32_t    speeds[INTFD_MAX_SPEEDS_ALLOWED];
+    int32_t     n_speeds;
+    uint32_t    max_speed;
 };
 
 struct intf_user_cfg {
@@ -77,21 +81,23 @@ struct intf_user_cfg {
     enum ovsrec_interface_user_config_duplex_e     duplex;
     enum ovsrec_interface_user_config_lane_split_e lane_split;
 
-    uint32_t    speeds;
-    uint32_t    mtu;
+    uint32_t   speeds[INTFD_MAX_SPEEDS_ALLOWED];
+    int32_t    n_speeds;
+    int32_t    mtu;
 };
 
 struct intf_oper_state {
     bool        enabled;
     enum ovsrec_interface_error_e reason;
+    enum ovsrec_interface_error_e autoneg_reason;
 
     enum ovsrec_interface_hw_intf_config_duplex_e   duplex;
     enum ovsrec_interface_hw_intf_config_pause_e    pause;
-    bool        autoneg;
-    uint32_t    mtu;
-    uint32_t    speeds;
-    uint32_t    fixed_speed;
-
+    int32_t     autoneg_capability;
+    int32_t     autoneg_state;
+    int32_t     mtu;
+    uint32_t    speeds[INTFD_MAX_SPEEDS_ALLOWED];
+    int32_t     n_speeds;
 };
 
 struct intf_pm_info {
@@ -138,6 +144,15 @@ char *iface_config_autoneg_strings[] = {
     INTERFACE_USER_CONFIG_MAP_AUTONEG_DEFAULT
 };
 
+typedef struct subsystem {
+    char         *name;
+    int32_t      mtu;
+} subsystem_t;
+
+/* HALON_TODO: Need to modify to handle multiple subsystems */
+/* Hardcoding this for now as the base subsytem */
+subsystem_t                     base_subsys = {0};
+
 static void del_old_interface(struct shash_node *sh_node);
 
 void
@@ -174,12 +189,30 @@ intfd_debug_dump(struct ds *ds, int argc, const char *argv[])
                           intfd_get_error_str(intf->op_state.reason));
             ds_put_format(ds, "    cfg_autoneg        : %s\n",
                           iface_config_autoneg_strings[intf->user_cfg.autoneg]);
-            ds_put_format(ds, "    op_autoneg         : %d\n",
-                          intf->op_state.autoneg);
-            ds_put_format(ds, "    cfg_speeds         : %d\n",
-                          intf->user_cfg.speeds);
-            ds_put_format(ds, "    fixed_speed        : %u\n",
-                          intf->op_state.fixed_speed);
+            ds_put_format(ds, "    op_autoneg_state   : %d\n",
+                          intf->op_state.autoneg_state);
+            ds_put_format(ds, "    cfg_speeds         : ");
+            if (intf->user_cfg.n_speeds > 0) {
+                ds_put_format(ds, "%d", intf->user_cfg.speeds[0]);
+                for (i = 1; i < intf->user_cfg.n_speeds; i++) {
+                    ds_put_format(ds, ", %d", intf->user_cfg.speeds[i]);
+                }
+            } else {
+                ds_put_format(ds, "unset");
+            }
+            ds_put_format(ds, "\n");
+
+            ds_put_format(ds, "    op_speeds          : ");
+            if (intf->op_state.n_speeds > 0) {
+                ds_put_format(ds, "%d", intf->op_state.speeds[0]);
+                for (i = 1; i < intf->op_state.n_speeds; i++) {
+                    ds_put_format(ds, ", %d", intf->op_state.speeds[i]);
+                }
+            } else {
+                ds_put_format(ds, "unset");
+            }
+            ds_put_format(ds, "\n");
+
             ds_put_format(ds, "    cfg_mtu            : %d\n",
                           intf->user_cfg.mtu);
             ds_put_format(ds, "    cfg_pause          : %d\n",
@@ -289,10 +322,13 @@ intfd_ovsdb_init(const char *db_path)
 
     /* Choose some OVSDB tables and columns to cache. */
     ovsdb_idl_add_table(idl, &ovsrec_table_open_vswitch);
+    ovsdb_idl_add_table(idl, &ovsrec_table_subsystem);
     ovsdb_idl_add_table(idl, &ovsrec_table_interface);
 
     /* Monitor the following columns, marking them read-only. */
     ovsdb_idl_add_column(idl, &ovsrec_open_vswitch_col_cur_cfg);
+    ovsdb_idl_add_column(idl, &ovsrec_subsystem_col_name);
+    ovsdb_idl_add_column(idl, &ovsrec_subsystem_col_other_info);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_name);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_user_config);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_pm_info);
@@ -321,6 +357,45 @@ intfd_ovsdb_exit(void)
     }
     ovsdb_idl_destroy(idl);
 } /* intfd_ovsdb_exit */
+
+static bool
+is_a_number(const char *nbr)
+{
+    while (*nbr) {
+        if (!isdigit(*nbr++)) {
+            return (false);
+        }
+    }
+
+    return (true);
+
+} /* is_a_number */
+
+static int
+parse_speeds(const char *speeds_str, uint32_t *speeds)
+{
+    char *ptr;
+    char *sp;
+    int i = 0;
+
+    sp = xstrdup(speeds_str);  /* strtok doesn't work with const char * */
+
+    ptr = strtok(sp, ",");
+    while (ptr) {
+        if (i >= INTFD_MAX_SPEEDS_ALLOWED || !is_a_number(
+                                                (const char *) ptr)) {
+            i = -1;
+            break;
+        }
+        speeds[i] = atoi(ptr);
+        i++;
+        ptr = strtok(NULL, ",");
+    }
+
+    free(sp);
+    return (i);
+
+} /* parse_speeds */
 
 static void
 intfd_parse_hw_info(struct intf_hw_info *hw_info,
@@ -353,13 +428,37 @@ intfd_parse_hw_info(struct intf_hw_info *hw_info,
 
     }
 
+    memset(hw_info->speeds, 0, sizeof(hw_info->speeds));
+    hw_info->n_speeds = 0;
+    data = smap_get(ifrow_hw_info, INTERFACE_HW_INTF_INFO_MAP_SPEEDS);
+    if (data) {
+        hw_info->n_speeds = parse_speeds(data, hw_info->speeds);
+    }
+
+    if (hw_info->n_speeds == 0) {
+        VLOG_WARN("value for speeds not set in h/w description file");
+    }
+
+    hw_info->max_speed = 0;
+    data = smap_get(ifrow_hw_info, INTERFACE_HW_INTF_INFO_MAP_MAX_SPEED);
+    if (data) {
+        hw_info->max_speed = atoi(data);
+    }
+
+    if (hw_info->max_speed == 0) {
+        VLOG_WARN("value for max_speed not set in h/w description file");
+    }
+
 } /* intfd_parse_hw_info */
 
 static void
 intfd_parse_user_cfg(struct intf_user_cfg *user_config,
-                     const struct smap *ifrow_config)
+                     const struct smap *ifrow_config,
+                     const struct smap *ifrow_hw_intf_info)
 {
     const char *data = NULL;
+    const char *hw_info_speeds = NULL;
+    struct intf_hw_info hw_supported_speeds;
 
     intfd_print_smap("interface_user_config", ifrow_config);
 
@@ -407,18 +506,60 @@ intfd_parse_user_cfg(struct intf_user_cfg *user_config,
         user_config->duplex = INTERFACE_USER_CONFIG_DUPLEX_HALF;
     }
 
-    /* HALON_TODO: Enhance the code to take multiple speeds,
-     * which can be passed on to vswitchd to do autoneg. */
-    user_config->speeds = 0;
+    /* Get user supplied speeds which can be passed on to vswitchd.
+     * data (user supplied speeds) is a comma separated list of numeric strings.
+     * Need to verify user input against supported speeds list.
+    */
+    user_config->n_speeds = 0;
     data = smap_get(ifrow_config, INTERFACE_USER_CONFIG_MAP_SPEEDS);
     if (data) {
-        user_config->speeds = atoi(data);
+        int i, j, found;
+
+        memset(user_config->speeds, 0, sizeof(user_config->speeds));
+        /* parse_speeds() returns -1 if invalid user input */
+        user_config->n_speeds =
+                        parse_speeds(data, user_config->speeds);
+
+        if (user_config->n_speeds > 0) {
+            /* Get speeds from hw_info */
+            hw_info_speeds = smap_get(ifrow_hw_intf_info,
+                                      INTERFACE_HW_INTF_INFO_MAP_SPEEDS);
+            hw_supported_speeds.n_speeds = parse_speeds(hw_info_speeds,
+                                           hw_supported_speeds.speeds);
+            if (user_config->n_speeds <= hw_supported_speeds.n_speeds) {
+                for (i = 0; i < user_config->n_speeds; i++) {
+                    found = false;
+                    for (j = 0; j < hw_supported_speeds.n_speeds; j++) {
+                        if (user_config->speeds[i] ==
+                            hw_supported_speeds.speeds[j]) {
+
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        user_config->n_speeds = -1;
+                        break;
+                    }
+                }
+            } else {
+                user_config->n_speeds = -1;
+            }
+        }
     }
 
     user_config->mtu = 0;
     data = smap_get(ifrow_config, INTERFACE_USER_CONFIG_MAP_MTU);
     if (data) {
-        user_config->mtu = atoi(data);
+        user_config->mtu = -1;
+        if (is_a_number(data)) {
+            user_config->mtu = atoi(data);
+            if ((user_config->mtu < INTFD_MIN_ALLOWED_USER_SPECIFIED_MTU) ||
+                (user_config->mtu > base_subsys.mtu)) {
+
+                user_config->mtu = -1;
+            }
+        }
     }
 
     /* user_config:lane_split */
@@ -636,6 +777,27 @@ set_op_state_pause(struct iface *intf)
 
 } /* set_op_state_pause */
 
+static uint32_t
+intfd_highest_speed(uint32_t *speeds, int num_speeds)
+{
+    uint32_t speed;
+    int i;
+
+    if (num_speeds < 1) {
+        return 0;
+    }
+
+    speed = speeds[0];
+    for (i = 1; i < num_speeds; i++) {
+        if (speeds[i] > speed) {
+            speed = speeds[i];
+        }
+    }
+
+    return (speed);
+
+} /* intfd_highest_speed */
+
 static void
 set_op_state_duplex(struct iface *intf)
 {
@@ -677,7 +839,8 @@ add_new_interface(const struct ovsrec_interface *ifrow)
     new_intf->name = xstrdup(ifrow->name);
 
     intfd_parse_hw_info(&(new_intf->hw_info), &(ifrow->hw_intf_info));
-    intfd_parse_user_cfg(&(new_intf->user_cfg), &(ifrow->user_config));
+    intfd_parse_user_cfg(&(new_intf->user_cfg), &(ifrow->user_config),
+                         &(ifrow->hw_intf_info));
     intfd_parse_pm_info(&(new_intf->hw_info), &(new_intf->pm_info), &(ifrow->pm_info));
 
     /* Note: splittable port processing occurs later once
@@ -753,6 +916,18 @@ del_old_interface(struct shash_node *sh_node)
  *                      does not support that particular Ethernet
  *                      speed.
  *
+ * disabled  invalid_mtu
+ *                  User specified MTU is invalid.
+ *
+ * disabled  invalid_speeds
+ *                  User specified speeds is invalid.
+ *
+ * disabled  autoneg_required
+ *                  User specified autoneg=off when it is required
+ *
+ * disabled  autoneg_not_supported
+ *                  User specified autoneg=on when it is not supported
+ *
  * NOTE: All new checks should be added above the following
  *
  * enabled   ok
@@ -796,6 +971,18 @@ calc_intf_op_state_n_reason(struct iface *intf)
     } else if (intf->pm_info.connector_status == INTERFACE_PM_INFO_CONNECTOR_STATUS_UNSUPPORTED) {
         intf->op_state.reason = INTERFACE_ERROR_MODULE_UNSUPPORTED;
 
+    /* Checking for invalid mtu. */
+    } else if (intf->op_state.mtu == -1) {
+        intf->op_state.reason = INTERFACE_ERROR_INVALID_MTU;
+
+    /* Checking for invalid speeds. */
+    } else if (intf->op_state.n_speeds == -1) {
+        intf->op_state.reason = INTERFACE_ERROR_INVALID_SPEEDS;
+
+    /* Checking for invalid autoneg. */
+    } else if (intf->op_state.autoneg_state == INTFD_AUTONEG_STATE_INVALID) {
+        intf->op_state.reason = intf->op_state.autoneg_reason;
+
     } else {
         /* HALON_TODO: Lots of other business logic needs to be added here. */
         /* If we get here, everything's fine. */
@@ -807,53 +994,168 @@ calc_intf_op_state_n_reason(struct iface *intf)
 } /* calc_intf_op_state_n_reason */
 
 static void
-set_interface_autoneg_capability(struct iface *intf)
+validate_n_set_interface_capability(struct iface *intf)
 {
-    /* This function determines if an interface supports
-     * auto-negotiation and the supported speed based on interface's
-     * op_state.connector value.  Note that some interface types may support
-     * auto-negotiation, but only of a particular fixed speed.  For
-     * interfaces that don't support auto-negotiation, fixed_speed
-     * must be non-0. */
+    /*
+     * This function determines if an interface supports, requires, or does not
+     * support auto-negotiation along with the supported speeds.
+     * It then looks at user input for AN and speeds and either reports an
+     * error if invalid user input or sets the appropriate value(s) for
+     * AN and speeds.
+    */
+
+    /* HALON_TODO: Add support for multi-speed capable transceivers (or
+       fixed ports). Hard coded for now to single speed.
+    */
+
+    /* If the user input an invalid "speeds", return */
+    if (intf->user_cfg.n_speeds == -1) {
+        intf->op_state.n_speeds = -1;
+        return;
+    }
+
+    /* If the user input an invalid mtu, return */
+    if (intf->user_cfg.mtu == -1) {
+        return;
+    }
+
     if (CONNECTOR_IS_SFP_PLUS(intf)) {
-        intf->op_state.autoneg = false;
-        intf->op_state.fixed_speed = SPEED_10G;
+        intf->op_state.autoneg_capability = INTFD_AUTONEG_CAPABILITY_UNSUPPORTED;
+        intf->op_state.speeds[0] = SPEED_10G;
+        intf->op_state.n_speeds = 1;
 
     } else if (CONNECTOR_IS_SFP(intf)) {
-        intf->op_state.autoneg = true;
-        intf->op_state.fixed_speed = SPEED_1G;
+        intf->op_state.autoneg_capability = INTFD_AUTONEG_CAPABILITY_REQUIRED;
+        /* HALON_TODO: Currently not supporting tri-speed devices */
+        intf->op_state.speeds[0] = SPEED_1G;
+        intf->op_state.n_speeds = 1;
 
     } else if (CONNECTOR_IS_QSFP_PLUS_40G(intf)) {
         /* QSFP+ CR4 requires AN, SR4/LR4 do not. */
         if (INTERFACE_PM_INFO_CONNECTOR_QSFP_CR4 == intf->pm_info.connector) {
-            intf->op_state.autoneg = true;
+            intf->op_state.autoneg_capability = INTFD_AUTONEG_CAPABILITY_REQUIRED;
         } else {
-            intf->op_state.autoneg = false;
+            intf->op_state.autoneg_capability = INTFD_AUTONEG_CAPABILITY_UNSUPPORTED;
         }
-        intf->op_state.fixed_speed = SPEED_40G;
+
+        intf->op_state.speeds[0] = SPEED_40G;
+        intf->op_state.n_speeds = 1;
 
     } else {
         /* This should be midplane connectors.  As of now,
          * all midplane connections are of KR/KR2 variety,
          * which requires auto-negotiation, even if a
          * specific speed is specified later. */
-        intf->op_state.autoneg = true;
-        intf->op_state.fixed_speed = 0;
+        intf->op_state.autoneg_capability = INTFD_AUTONEG_CAPABILITY_REQUIRED;
+        intf->op_state.speeds[0] = 0;
+        intf->op_state.n_speeds = 0;
     }
 
-    /* Override autoneg if user specified non-default setting. */
-    switch (intf->user_cfg.autoneg) {
-    case INTERFACE_USER_CONFIG_AUTONEG_ON:
-        intf->op_state.autoneg = true;
-        break;
-    case INTERFACE_USER_CONFIG_AUTONEG_OFF:
-        intf->op_state.autoneg = false;
-        break;
-    default:
-        break;
+    /* Override autoneg and speeds based on user input */
+    intf->op_state.autoneg_reason = INTERFACE_ERROR_UNINITIALIZED;
+
+    /* If autoneg=true and didn't set speeds */
+    if ((intf->user_cfg.autoneg == INTERFACE_USER_CONFIG_AUTONEG_ON) &&
+        (intf->user_cfg.n_speeds == 0)) {
+
+        intf->op_state.autoneg_state = INTFD_AUTONEG_STATE_ENABLED;
+
+        if (intf->op_state.autoneg_capability == INTFD_AUTONEG_CAPABILITY_UNSUPPORTED) {
+            /* report error */
+            intf->op_state.autoneg_state = INTFD_AUTONEG_STATE_INVALID;
+            intf->op_state.autoneg_reason = INTERFACE_ERROR_AUTONEG_NOT_SUPPORTED;
+        }
+
+    /* If autoneg=false and didn't set speeds */
+    } else if ((intf->user_cfg.autoneg == INTERFACE_USER_CONFIG_AUTONEG_OFF) &&
+               (intf->user_cfg.n_speeds == 0)) {
+
+        intf->op_state.autoneg_state = INTFD_AUTONEG_STATE_DISABLED;
+
+        if (intf->op_state.autoneg_capability ==
+                                        INTFD_AUTONEG_CAPABILITY_REQUIRED) {
+            /* report error */
+            intf->op_state.autoneg_state = INTFD_AUTONEG_STATE_INVALID;
+            intf->op_state.autoneg_reason = INTERFACE_ERROR_AUTONEG_REQUIRED;
+
+        } else if (intf->op_state.autoneg_capability ==
+                                        INTFD_AUTONEG_CAPABILITY_OPTIONAL) {
+
+            /* use highest supported speed */
+            intf->op_state.speeds[0] = intfd_highest_speed(intf->hw_info.speeds,
+                                                           intf->hw_info.n_speeds);
+            intf->op_state.n_speeds = 1;
+        }
+
+    /* If not set autoneg and set speeds */
+    } else if ((intf->user_cfg.autoneg == INTERFACE_USER_CONFIG_AUTONEG_DEFAULT) &&
+               (intf->user_cfg.n_speeds > 0)) {
+
+        if (intf->op_state.autoneg_capability != INTFD_AUTONEG_CAPABILITY_UNSUPPORTED) {
+
+            intf->op_state.autoneg_state = INTFD_AUTONEG_STATE_ENABLED;
+
+            /* Use user speeds */
+            memcpy(intf->op_state.speeds, intf->user_cfg.speeds,
+                   sizeof(intf->user_cfg.speeds));
+            intf->op_state.n_speeds = intf->user_cfg.n_speeds;
+
+        } else {
+
+            intf->op_state.autoneg_state = INTFD_AUTONEG_STATE_DISABLED;
+
+            /* get first speed supplied by user */
+            intf->op_state.speeds[0] = intf->user_cfg.speeds[0];
+            intf->op_state.n_speeds = 1;
+        }
+
+    /* If autoneg=true and set speeds */
+    } else if ((intf->user_cfg.autoneg == INTERFACE_USER_CONFIG_AUTONEG_ON) &&
+               (intf->user_cfg.n_speeds > 0)) {
+
+        if ((intf->op_state.autoneg_capability == INTFD_AUTONEG_CAPABILITY_REQUIRED) ||
+            (intf->op_state.autoneg_capability == INTFD_AUTONEG_CAPABILITY_OPTIONAL)) {
+
+            intf->op_state.autoneg_state = INTFD_AUTONEG_STATE_ENABLED;
+
+            /* Use user speeds */
+            memcpy(intf->op_state.speeds, intf->user_cfg.speeds,
+                   sizeof(intf->user_cfg.speeds));
+            intf->op_state.n_speeds = intf->user_cfg.n_speeds;
+
+        } else {
+            /* report error */
+            intf->op_state.autoneg_state = INTFD_AUTONEG_STATE_INVALID;
+            intf->op_state.autoneg_reason = INTERFACE_ERROR_AUTONEG_NOT_SUPPORTED;
+        }
+
+    /* If autoneg=false and set speeds */
+    } else if ((intf->user_cfg.autoneg == INTERFACE_USER_CONFIG_AUTONEG_OFF) &&
+               (intf->user_cfg.n_speeds > 0)) {
+
+        intf->op_state.autoneg_state = INTFD_AUTONEG_STATE_DISABLED;
+
+        if (intf->op_state.autoneg_capability == INTFD_AUTONEG_CAPABILITY_REQUIRED) {
+
+            /* report error */
+            intf->op_state.autoneg_state = INTFD_AUTONEG_STATE_INVALID;
+            intf->op_state.autoneg_reason = INTERFACE_ERROR_AUTONEG_REQUIRED;
+        } else {
+            /* Use first entry in user speeds */
+            intf->op_state.speeds[0] = intf->user_cfg.speeds[0];
+            intf->op_state.n_speeds = 1;
+        }
+
+    /* If not set autoneg and not set speeds */
+    } else {
+        if (intf->op_state.autoneg_capability == INTFD_AUTONEG_CAPABILITY_UNSUPPORTED) {
+            intf->op_state.autoneg_state = INTFD_AUTONEG_STATE_DISABLED;
+        } else {
+            intf->op_state.autoneg_state = INTFD_AUTONEG_STATE_ENABLED;
+        }
     }
 
-} /* set_interface_autoneg_capability */
+} /* validate_n_set_interface_capability */
 
 void
 set_intf_hw_config_in_db(const struct ovsrec_interface *ifrow, struct iface *intf)
@@ -883,7 +1185,7 @@ set_intf_hw_config_in_db(const struct ovsrec_interface *ifrow, struct iface *int
 
         /* hw_intf_config:autoneg */
         tmp_str = INTERFACE_HW_INTF_CONFIG_MAP_AUTONEG_OFF;
-        if (intf->op_state.autoneg == true) {
+        if (intf->op_state.autoneg_state == INTFD_AUTONEG_STATE_ENABLED) {
             tmp_str = INTERFACE_HW_INTF_CONFIG_MAP_AUTONEG_ON;
         }
 
@@ -912,22 +1214,24 @@ set_intf_hw_config_in_db(const struct ovsrec_interface *ifrow, struct iface *int
         smap_add(&smap, INTERFACE_HW_INTF_CONFIG_MAP_PAUSE, tmp_str);
 
         /* hw_intf_config:mtu */
-        if (intf->op_state.mtu > 0) {
-            smap_add_format(&smap, INTERFACE_HW_INTF_CONFIG_MAP_MTU, "%d", intf->op_state.mtu);
+        if (intf->op_state.mtu >= INTFD_MIN_ALLOWED_USER_SPECIFIED_MTU) {
+            smap_add_format(&smap, INTERFACE_HW_INTF_CONFIG_MAP_MTU, "%d",
+                            intf->op_state.mtu);
         }
 
-        /* If fixed_speed is non-zero based on the
-         * set_interface_autoneg_capability() function above, it is the
-         * single speed supported by a given interface connector type,
-         * typically pluggable types such as SFP/QSFP/etc.
-         * In these cases, we ignore user-configured speeds. */
-        if (0 != intf->op_state.fixed_speed) {
-            smap_add_format(&smap, INTERFACE_HW_INTF_CONFIG_MAP_SPEEDS,
-                            "%d", intf->op_state.fixed_speed);
-        } else if (intf->op_state.speeds > 0) {
+        /* Set speeds */
+        if (intf->op_state.n_speeds > 0) {
             /* Use user-configured speeds. */
-            smap_add_format(&smap, INTERFACE_HW_INTF_CONFIG_MAP_SPEEDS,
-                            "%d", intf->op_state.speeds);
+            char speed_string[INTFD_MAX_SPEEDS_ALLOWED*20];
+            int i = 0;
+
+            sprintf(speed_string, "%d", intf->op_state.speeds[0]);
+            for (i = 1; i < intf->op_state.n_speeds; i++) {
+                sprintf(speed_string+strlen(speed_string), ",%d",
+                        intf->op_state.speeds[i]);
+            }
+
+            smap_add(&smap, INTERFACE_HW_INTF_CONFIG_MAP_SPEEDS, speed_string);
         }
 
         smap_add(&smap, INTERFACE_HW_INTF_CONFIG_MAP_INTERFACE_TYPE,
@@ -939,25 +1243,41 @@ set_intf_hw_config_in_db(const struct ovsrec_interface *ifrow, struct iface *int
 } /* set_intf_hw_config_in_db */
 
 static void
+set_op_state_mtu(struct iface *intf)
+{
+    /* Use the user MTU if specified and valid, else use default */
+    switch (intf->user_cfg.mtu) {
+        case -1:
+            intf->op_state.mtu = -1;
+            break;
+        case 0:
+            intf->op_state.mtu = INTFD_DEFAULT_MTU;
+            break;
+        default:
+            intf->op_state.mtu = intf->user_cfg.mtu;
+            break;
+    }
+} /* set_op_state_mtu */
+
+static void
 set_interface_config(const struct ovsrec_interface *ifrow, struct iface *intf)
 {
-
     VLOG_DBG("Received new config for interface %s", ifrow->name);
+
+    /* Set mtu. */
+    set_op_state_mtu(intf);
+
+    /* Update autoneg capabilities of the interface. */
+    validate_n_set_interface_capability(intf);
 
     /* Figure out if interface can be enabled. */
     calc_intf_op_state_n_reason(intf);
 
     if (intf->op_state.enabled == true) {
 
-        /* Update autoneg capabilities of the interface. */
-        set_interface_autoneg_capability(intf);
-
         set_op_state_pause(intf);
 
         set_op_state_duplex(intf);
-
-        intf->op_state.speeds = intf->user_cfg.speeds;
-        intf->op_state.mtu = intf->user_cfg.mtu;
     }
 
     /* One interface needs to be reconfigured in h/w. */
@@ -969,6 +1289,7 @@ static int
 handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
 {
     int rc = 0;
+    int i;
     bool cfg_changed = false;
     bool split_changed = false;
     bool pm_info_changed = false;
@@ -994,7 +1315,8 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
 
         } else if (OVSREC_IDL_IS_ROW_MODIFIED(ifrow, idl_seqno)) {
 
-            intfd_parse_user_cfg(&new_user_cfg, &ifrow->user_config);
+            intfd_parse_user_cfg(&new_user_cfg, &ifrow->user_config,
+                                 &ifrow->hw_intf_info);
 
             if (!ifrow->split_parent) {
                 /* Parse this row's pm_info. */
@@ -1029,9 +1351,16 @@ handle_interfaces_config_mods(struct shash *sh_idl_interfaces)
                 intf->user_cfg.mtu = new_user_cfg.mtu;
             }
 
-            if (intf->user_cfg.speeds != new_user_cfg.speeds) {
+            for (i = 0; i < INTFD_MAX_SPEEDS_ALLOWED; i++) {
+                if (intf->user_cfg.speeds[i] != new_user_cfg.speeds[i]) {
+                    cfg_changed = true;
+                    intf->user_cfg.speeds[i] = new_user_cfg.speeds[i];
+                }
+            }
+
+            if (intf->user_cfg.n_speeds != new_user_cfg.n_speeds) {
                 cfg_changed = true;
-                intf->user_cfg.speeds = new_user_cfg.speeds;
+                intf->user_cfg.n_speeds = new_user_cfg.n_speeds;
             }
 
             if (intf->user_cfg.lane_split != new_user_cfg.lane_split) {
@@ -1099,6 +1428,7 @@ intfd_reconfigure(void)
 {
     int rc = 0;
     const struct ovsrec_interface *ifrow = NULL;
+    const struct ovsrec_subsystem *subrow = NULL;
     unsigned int new_idl_seqno = 0;
     struct shash sh_idl_interfaces;
     struct shash_node *sh_node = NULL, *sh_next = NULL;
@@ -1107,6 +1437,32 @@ intfd_reconfigure(void)
     if (new_idl_seqno == idl_seqno) {
         /* There was no change in the dB. */
         return 0;
+    }
+
+    /* Need MTU from subsystem table.
+     *
+     * HALON_TODO: need to add multiple subsystem support
+     *
+     * For now, hard coding to look for "base" and continue to assume
+     * that all interfaces belong to the "base" subsystem.
+    */
+
+    base_subsys.mtu = 0;
+    OVSREC_SUBSYSTEM_FOR_EACH(subrow, idl) {
+        const char *data;
+        if (strcmp(subrow->name, "base") == 0) {
+            data = smap_get(&subrow->other_info,
+                            SUBSYSTEM_OTHER_INFO_MAX_TRANSMISSION_UNIT);
+            if (data) {
+                base_subsys.mtu = atoi(data);
+                if (base_subsys.mtu < INTFD_MIN_ALLOWED_USER_SPECIFIED_MTU) {
+                    VLOG_WARN("MTU in hw description file for subsystem %s is "
+                              "less than minimum allowed of %d",
+                              subrow->name,
+                              INTFD_MIN_ALLOWED_USER_SPECIFIED_MTU);
+                }
+            }
+        }
     }
 
     /* Collect all the interfaces in the dB. */

@@ -180,6 +180,16 @@
 #define CABLE_TECH_IS_ACTIVE(p)  (INTERFACE_PM_INFO_CABLE_TECHNOLOGY_ACTIVE == (p)->pm_info.cable_tech)
 #define CABLE_TECH_IS_PASSIVE(p) (INTERFACE_PM_INFO_CABLE_TECHNOLOGY_PASSIVE == (p)->pm_info.cable_tech)
 
+#define INTFD_MIN_ALLOWED_USER_SPECIFIED_MTU     576
+#define INTFD_DEFAULT_MTU                       1500
+#define INTFD_MAX_SPEEDS_ALLOWED                  10
+#define INTFD_AUTONEG_STATE_INVALID               -1
+#define INTFD_AUTONEG_STATE_DISABLED               0
+#define INTFD_AUTONEG_STATE_ENABLED                1
+#define INTFD_AUTONEG_CAPABILITY_UNSUPPORTED      10
+#define INTFD_AUTONEG_CAPABILITY_OPTIONAL         11
+#define INTFD_AUTONEG_CAPABILITY_REQUIRED         12
+
 extern void intfd_ovsdb_init(const char *db_path);
 extern void intfd_ovsdb_exit(void);
 extern void intfd_run(void);

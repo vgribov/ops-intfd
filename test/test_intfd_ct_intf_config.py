@@ -32,6 +32,7 @@ fixed_intf = "1"
 test_intf = "21"
 split_parent = '50'
 split_children = ['50-1', '50-2', '50-3', '50-4']
+qsfp_intf = "53"
 
 def short_sleep(tm=.5):
     time.sleep(tm)
@@ -160,6 +161,7 @@ class intfdTest(HalonTest):
 
         # Clear the user_config
         sw_clear_user_config(s1, test_intf)
+        short_sleep()
 
         # Verify that interface is still disabled.
         err, hw_enable = sw_get_intf_state(s1, test_intf, ['error', 'hw_intf_config:enable'])
@@ -170,6 +172,149 @@ class intfdTest(HalonTest):
                       "but they are error = %s, hw_intf_config:enable = %s." \
                       % (err, hw_enable)
 
+        # MTU tests
+
+        # Max MTU in h/w desc file (VSI) is 1500.
+        # Min allowed MTU to be set is 576
+        # Default MTU is 1500.
+
+        # Clear MTU and verify it is set to default.
+        sw_set_intf_pm_info(s1, test_intf, ('connector=SFP_RJ45', \
+                                            'connector_status=supported'))
+        sw_set_intf_user_config(s1, test_intf, ['admin=up'])
+        short_sleep()
+
+        info("Verify that MTU is set to default=1500\n")
+        mtu, hw_enable = sw_get_intf_state(s1, test_intf, \
+                                        ['hw_intf_config:mtu', \
+                                         'hw_intf_config:enable'])
+        assert mtu == '1500' and hw_enable=="true", \
+                    "MTU is '%s'. Should be default=1500;" + \
+                    " hw_enable is %s. should be 'true'" % (mtu, hw_enable)
+
+        # Set MTU to illegal value (not a valid number)
+        sw_set_intf_user_config(s1, test_intf, [ 'admin=up', 'mtu=1500a' ])
+        short_sleep()
+        info("Verify that MTU is not set to illegal value=1500a\n")
+
+        hw_enable = sw_get_intf_state(s1, test_intf, \
+                                 ['hw_intf_config:enable'])
+        assert hw_enable=="false", \
+                    " hw_enable is %s. should be 'false'" % hw_enable
+        error = sw_get_intf_state(s1, test_intf, ['error'])
+        assert error == 'invalid_mtu', \
+                    "error is '%s'. Should be invalid_mtu;" % error
+
+        # Set MTU to minimum allowed value.
+        sw_set_intf_user_config(s1, test_intf, [ 'admin=up', 'mtu=576' ])
+        short_sleep()
+        info("Verify that MTU is set to min allowed value=576\n")
+
+        hw_enable = sw_get_intf_state(s1, test_intf, \
+                                 ['hw_intf_config:enable'])
+        assert hw_enable=="true", \
+                    " hw_enable is %s. should be 'true'" % hw_enable
+        mtu = sw_get_intf_state(s1, test_intf, \
+                                ['hw_intf_config:mtu'])
+        assert mtu == '576', \
+                    "MTU is '%s'. Should be 576;" % mtu
+
+        # Set MTU to max allowed value.
+        sw_set_intf_user_config(s1, test_intf, [ 'admin=up', 'mtu=1500' ])
+        short_sleep()
+        info("Verify that MTU is set to max allowed value=1500\n")
+        mtu, hw_enable = sw_get_intf_state(s1, test_intf, \
+                                ['hw_intf_config:mtu', \
+                                 'hw_intf_config:enable'])
+        assert mtu == '1500' and hw_enable=="true", \
+                    "MTU is '%s'. Should be 1500;" + \
+                    " hw_enable is %s. should be 'true'" % (mtu, hw_enable)
+
+        # Set MTU to value in the allowed range.
+        sw_set_intf_user_config(s1, test_intf, [ 'admin=up', 'mtu=1000' ])
+        short_sleep()
+        info("Verify that MTU is set to allowed value=1000\n")
+        mtu, hw_enable = sw_get_intf_state(s1, test_intf, \
+                                ['hw_intf_config:mtu', \
+                                 'hw_intf_config:enable'])
+        assert mtu == '1000' and hw_enable=="true", \
+                    "MTU is '%s'. Should be 1000;" + \
+                    " hw_enable is %s. should be 'true'" % (mtu, hw_enable)
+
+        # Set MTU above allowed range.
+        sw_set_intf_user_config(s1, test_intf, [ 'mtu=2000' ])
+        short_sleep()
+
+        info("Verify that MTU is not set when above allowed range\n")
+        error = sw_get_intf_state(s1, test_intf, ['error'])
+        assert error == 'invalid_mtu', \
+                        "error is %s, should be 'invalid_mtu'" % error
+
+        mtu = sw_get_intf_state(s1, test_intf, ['hw_intf_config:mtu'])
+        assert mtu != '2000', "MTU incorrectly set above allowed range"
+
+        # Set MTU below allowed range.
+        sw_set_intf_user_config(s1, test_intf, [ 'mtu=100' ])
+        short_sleep()
+
+        info("Verify that MTU is not set when below allowed range\n")
+        error = sw_get_intf_state(s1, test_intf, ['error'])
+        assert error == 'invalid_mtu', \
+                        "error is %s, should be 'invalid_mtu'" % error
+
+        mtu = sw_get_intf_state(s1, test_intf, ['hw_intf_config:mtu'])
+        assert mtu != '100', "MTU incorrectly set below allowed range"
+
+
+        # "speeds" tests
+
+        # "speeds" must be proper subset of supported speeds in hw_info
+
+        # Clear the user_config
+        sw_clear_user_config(s1, test_intf)
+        short_sleep()
+
+        # Get the supported speeds from hw_intf_info:speeds
+        hw_info_speeds = sw_get_intf_state(s1, test_intf, \
+                                            ['hw_intf_info:speeds'])
+
+        sw_set_intf_user_config(s1, test_intf, [ 'admin=up' ])
+        short_sleep()
+        hw_enable = sw_get_intf_state(s1, test_intf, \
+                                 ['hw_intf_config:enable'])
+        assert hw_enable == "true", \
+                    " hw_enable is %s. should be 'true'" % hw_enable
+
+        # The expected values for hw_info_speeds is [1000,10000]
+
+        assert hw_info_speeds == '1000,10000', \
+            "unexpected values for hw_intf_info:speeds, expected " + \
+            "1000,10000 but got %s" % hw_info_speeds
+
+        # Set user_config:speeds to a valid value(s)
+        sw_set_intf_user_config(s1, test_intf, [ 'admin=up', \
+                                            'speeds=1000,10000' ])
+        short_sleep()
+        info("Verify valid speeds accepted\n")
+        speeds = sw_get_intf_state(s1, test_intf, ['hw_intf_config:speeds'])
+        assert speeds == '1000,10000', "speeds is %s. Should be '1000,10000'" \
+                                                % (speeds)
+
+        # Set user_config:speeds to an invalid value
+        sw_set_intf_user_config(s1, test_intf, [ 'speeds=1100,10000' ])
+        short_sleep()
+
+        info("Verify invalid speeds rejected\n")
+        error = sw_get_intf_state(s1, test_intf, ['error'])
+        assert error == 'invalid_speeds', \
+               "error is %s, should be 'invalid_speeds'" % error
+
+        speeds = sw_get_intf_state(s1, test_intf, ['hw_intf_config:speeds'])
+        assert speeds != '1100,10000', "invalid speeds accepted!"
+
+        # Clear the user_config
+        sw_clear_user_config(s1, test_intf)
+        short_sleep()
 
     # Set pm_info to valid values, and verify that 'intfd'
     # changes the "error" state to something other than 'module_missing'
@@ -179,6 +324,7 @@ class intfdTest(HalonTest):
         s1 = self.net.switches[0]
 
         # Enable the interface, and set the pm_info to valid values.
+        sw_clear_user_config(s1, test_intf)
         sw_set_intf_user_config(s1, test_intf, ['admin=up'])
         sw_set_intf_pm_info(s1, test_intf, ('connector=SFP_RJ45', 'connector_status=supported'))
         short_sleep()
@@ -310,6 +456,8 @@ class intfdTest(HalonTest):
         info("\n============= intfd user config autoneg tests =============\n")
         s1 = self.net.switches[0]
 
+        sw_clear_user_config(s1, test_intf);
+        sw_clear_user_config(s1, split_parent);
         sw_set_intf_user_config(s1, test_intf, ['admin=up'])
         sw_set_intf_user_config(s1, split_parent, ['admin=up', 'lane_split=no-split'])
 
@@ -330,6 +478,7 @@ class intfdTest(HalonTest):
             assert autoneg == out, "Autoneg configuration in hw_intf_config is wrong."
 
         pm_autoneg = {
+            'SFP_RJ45' : 'on',
             'SFP_SR' : 'off',
             'SFP_LR' : 'off',
             'SFP_DAC' : 'off',
@@ -367,14 +516,297 @@ class intfdTest(HalonTest):
                 out = sw_get_intf_state(s1, child_port, ['hw_intf_config:autoneg'])
                 assert autoneg == out, "Autgoneg configuration in hw_intf_config is wrong for split child."
 
-        # clear the OVSDB config of the interface.
+
+        # Test the interaction of user input for speeds and AN for the
+        # various interface types to ensure AN and speeds are properly set.
+
+        # The following describes what is expected.
+        #
+        # First, specify what interface types support or require AN.
+        #    SFP:        autoneg is REQUIRED, speeds = supported_speeds
+        #    SFP+:       autoneg is NOT_SUPPORTED, speeds = 10G
+        #    QSFP+.CR4:  autoneg is REQUIRED, speeds = 40G
+        #    QSFP+.else: autoneg is NOT_SUPPORTED, speeds = 40G
+        #    else:       autoneg is REQUIRED, speeds = 0
+        #
+        # Now indicate impact of user supplied AN/speeds on the above defaults
+        #
+        # supported_speeds: The list of supported speeds in hw desc file
+        # fixed_speed: Set speed if AN is not supported
+        # highest_speed: Highest speed in supported_speed list
+        # first_speed: First speed in the list supplied by customer
+        # user_speeds: Speeds list supplied by customer
+        # speeds: Is set to one of the above based on transceiver type,
+        #         user AN setting, and user speeds setting.
+        #
+        # AN not specified, user_speeds not specified:
+        #   if AN supported or required: AN=true, speeds=supported_speeds
+        #   if AN not_supported: AN=false, speeds=fixed_speed
+        # AN=T, user_speeds not specified
+        #   if AN supported or required: AN=true, speeds=supported_speeds
+        #   if AN not_supported: user error! "AN not supported"
+        # AN=F, user_speeds not specified
+        #   if AN supported: AN=false, speeds=highest_speed
+        #   if AN required: user error! "AN required"
+        #   if AN not_supported: AN=false, speeds=fixed_speed
+        # AN not specified, user_speeds specified:
+        #   if AN supported or required: AN=true, speeds=user_speeds
+        #   if AN not_supported: AN=false, speeds=first_speed
+        # AN=T, user_speeds specified
+        #   if AN supported or required: AN=true, speeds=user_speeds
+        #   if AN not_supported: user error! "AN not supported"
+        # AN=F, user_speeds specified
+        #   if AN supported: AN=false, speeds=first_speed
+        #   if AN required: user error! "AN required"
+        #   if AN not_supported: AN=false, speeds=first_speed
+
+        # Tests follow for the above cases
         sw_clear_user_config(s1, test_intf)
-        sw_set_intf_pm_info(s1, test_intf, ('connector=absent', 'connector_status=unsupported'))
+        sw_clear_user_config(s1, qsfp_intf)
+
+        sfp_fixed = '1000'
+        qsfp_fixed = '40000'
+
+        #########   AN not specified, user_speeds not specified:  ########
+
+        #   if AN supported or required: AN=true, user_speeds=supported_speeds
+        sw_set_intf_pm_info(s1, test_intf, ('connector=SFP_RJ45', \
+                                          'connector_status=supported'))
+        short_sleep()
+        sw_set_intf_user_config(s1, test_intf, ['admin=up'])
+        short_sleep()
+        info("Verify AN not specified, user_speeds not specified, " + \
+                                                "AN supported/required\n");
+        autoneg, speeds = sw_get_intf_state(s1, test_intf, \
+                        ['hw_intf_config:autoneg', 'hw_intf_config:speeds'])
+
+        assert autoneg == 'on' and speeds == sfp_fixed, \
+            "autoneg is %s, expected 'on'; speeds is %s, expected %s" \
+                                        % (autoneg, speeds, sfp_fixed)
+
+        #   if AN not_supported: AN=false, speeds=fixed_speed
+        sw_set_intf_pm_info(s1, qsfp_intf, ('connector=QSFP_SR4',  \
+                                            'connector_status=supported'))
+        short_sleep()
+        sw_set_intf_user_config(s1, qsfp_intf, ['admin=up'])
+        short_sleep()
+        info("Verify AN not specified, user_speeds not specified, AN unsupported\n");
+        hw_enable = sw_get_intf_state(s1, qsfp_intf, ['hw_intf_config:enable'])
+        assert hw_enable == "true", "hw_enable should be true and is not"
+
+        autoneg, speeds = sw_get_intf_state(s1, qsfp_intf, \
+                        ['hw_intf_config:autoneg', 'hw_intf_config:speeds'])
+
+        assert autoneg == 'off' and speeds == qsfp_fixed, \
+            "autoneg is %s, expected 'off'; speeds is %s, expected %s" \
+                                        % (autoneg, speeds, qsfp_fixed)
+
+        ###########   AN=T, user_speeds not specified    ##################
+
+        #   if AN supported or required: AN=true, speeds=supported_speeds
+        sw_set_intf_pm_info(s1, test_intf, ('connector=SFP_RJ45', \
+                                          'connector_status=supported'))
+        short_sleep()
+        sw_set_intf_user_config(s1, test_intf, ['admin=up', 'autoneg=on'])
+        short_sleep()
+        info("Verify AN set=true, user_speeds not specified, " + \
+                                                "AN supported/required\n");
+        autoneg, speeds = sw_get_intf_state(s1, test_intf, \
+                        ['hw_intf_config:autoneg', 'hw_intf_config:speeds'])
+
+        assert autoneg == 'on' and speeds == sfp_fixed, \
+            "autoneg is %s, expected 'on'; speeds is %s, expected %s" \
+                                        % (autoneg, speeds, sfp_fixed)
+
+        #   if AN not_supported: user error! "AN not supported"
+        sw_set_intf_pm_info(s1, qsfp_intf, ('connector=QSFP_SR4',  \
+                                            'connector_status=supported'))
+        short_sleep()
+        sw_set_intf_user_config(s1, qsfp_intf, ['admin=up', 'autoneg=on'])
+        short_sleep()
+        info("Verify AN set=true, user_speeds not specified, AN unsupported\n");
+        hw_enable = sw_get_intf_state(s1, qsfp_intf, ['hw_intf_config:enable'])
+        assert hw_enable == "false", "hw_enable should be false and is not"
+        error = sw_get_intf_state(s1, qsfp_intf, ['error'])
+        assert error == "autoneg_not_supported", \
+                   "error is [%s] and should be autoneg_not_supported" % error
+
+        ###########     AN=F, user_speeds not specified    ############
+
+        #   if AN supported: AN=false, speeds=highest_speed
+        #
+        #     NOTE: We don't currently have a type that is supported
+        #           but not required.
+        #
+
+        #   if AN required: user error! "AN required"
+        sw_set_intf_pm_info(s1, test_intf, ('connector=SFP_RJ45', \
+                                          'connector_status=supported'))
+        short_sleep()
+        sw_set_intf_user_config(s1, test_intf, ['admin=up', 'autoneg=off'])
+        short_sleep()
+        info("Verify AN set=false, user_speeds not specified, " + \
+                                                "AN required\n");
+        hw_enable = sw_get_intf_state(s1, test_intf, ['hw_intf_config:enable'])
+        assert hw_enable == "false", "hw_enable should be false and is not"
+        error = sw_get_intf_state(s1, test_intf, ['error'])
+        assert error == "autoneg_required", \
+                      "error is [%s] and should be autoneq_required" % error
+
+        #   if AN not_supported: AN=false, speeds=fixed_speed
+        sw_set_intf_pm_info(s1, qsfp_intf, ('connector=QSFP_LR4', \
+                                          'connector_status=supported'))
+        short_sleep()
+        sw_set_intf_user_config(s1, qsfp_intf, ['admin=up', 'autoneg=off'])
+        short_sleep()
+        info("Verify AN set=false, user_speeds not specified, " + \
+                                                "AN unsupported\n");
+        hw_enable = sw_get_intf_state(s1, qsfp_intf, ['hw_intf_config:enable'])
+        assert hw_enable == "true", "hw_enable should be true and is not"
+
+        autoneg, speeds = sw_get_intf_state(s1, qsfp_intf, \
+                        ['hw_intf_config:autoneg', 'hw_intf_config:speeds'])
+
+        assert autoneg == 'off' and speeds == qsfp_fixed, \
+            "autoneg is %s, expected 'off'; speeds is %s, expected %s" \
+                                        % (autoneg, speeds, qsfp_fixed)
+
+        ###########    AN not specified, user_speeds specified:    ############
+
+        #   if AN supported or required: AN=true, speeds=cust_speeds
+        sw_clear_user_config(s1, test_intf)
+        short_sleep()
+        sw_set_intf_pm_info(s1, test_intf, ('connector=SFP_RJ45', \
+                                          'connector_status=supported'))
+        short_sleep()
+        sw_set_intf_user_config(s1, test_intf, ['admin=up', 'speeds=1000'])
+        short_sleep()
+        info("Verify AN not specified, user_speeds specified, " + \
+                                                "AN supported/required\n");
+        hw_enable = sw_get_intf_state(s1, test_intf, ['hw_intf_config:enable'])
+        assert hw_enable == "true", "hw_enable should be true and is not"
+
+        autoneg, speeds = sw_get_intf_state(s1, test_intf, \
+                        ['hw_intf_config:autoneg', 'hw_intf_config:speeds'])
+
+        assert autoneg == 'on' and speeds == '1000', \
+            "autoneg is %s, expected 'on'; speeds is %s, expected %s" \
+                                        % (autoneg, speeds, '1000')
+
+        #   if AN not_supported: AN=false, speeds=first_speed
+        sw_clear_user_config(s1, qsfp_intf)
+        short_sleep()
+        sw_set_intf_pm_info(s1, qsfp_intf, ('connector=QSFP_LR4', \
+                                          'connector_status=supported'))
+        short_sleep()
+        sw_set_intf_user_config(s1, qsfp_intf, ['admin=up', 'speeds=40000'])
+        short_sleep()
+
+        info("Verify AN not specified, user_speeds specified, AN unsupported\n");
+        hw_enable = sw_get_intf_state(s1, qsfp_intf, ['hw_intf_config:enable'])
+        assert hw_enable == "true", "hw_enable should be true and is not"
+
+        autoneg, speeds = sw_get_intf_state(s1, qsfp_intf, \
+                        ['hw_intf_config:autoneg', 'hw_intf_config:speeds'])
+
+        assert autoneg == 'off' and speeds == qsfp_fixed, \
+            "autoneg is %s, expected 'off'; speeds is %s, expected %s" \
+                                        % (autoneg, speeds, qsfp_fixed)
+
+        ###########    AN=T, user_speeds specified    ############
+
+        #   if AN supported or required: AN=true, speeds=cust_speeds
+        short_sleep()
+        sw_set_intf_pm_info(s1, test_intf, ('connector=SFP_RJ45', \
+                                          'connector_status=supported'))
+        short_sleep()
+        sw_set_intf_user_config(s1, test_intf, ['admin=up', 'autoneg=on', \
+                                                        'speeds=1000'])
+        short_sleep()
+        info("Verify AN set=true, user_speeds specified, " + \
+                                                "AN supported/required\n");
+        hw_enable = sw_get_intf_state(s1, test_intf, ['hw_intf_config:enable'])
+        assert hw_enable == "true", "hw_enable should be true and is not"
+
+        autoneg, speeds = sw_get_intf_state(s1, test_intf, \
+                        ['hw_intf_config:autoneg', 'hw_intf_config:speeds'])
+
+        assert autoneg == 'on' and speeds == '1000', \
+            "autoneg is %s, expected 'on'; speeds is %s, expected %s" \
+                                        % (autoneg, speeds, '1000')
+
+        #   if AN not_supported: user error! "AN not supported"
+        short_sleep()
+        sw_set_intf_pm_info(s1, qsfp_intf, ('connector=QSFP_LR4', \
+                                          'connector_status=supported'))
+        short_sleep()
+        sw_set_intf_user_config(s1, qsfp_intf, ['admin=up', 'autoneg=on', \
+                                                'speeds=40000'])
+        short_sleep()
+
+        info("Verify AN set=true, user_speeds specified, AN unsupported\n");
+        hw_enable = sw_get_intf_state(s1, qsfp_intf, ['hw_intf_config:enable'])
+        assert hw_enable == "false", "hw_enable should be false and is not"
+        error = sw_get_intf_state(s1, qsfp_intf, ['error'])
+        assert error == "autoneg_not_supported", \
+                 "error is [%s] and should be autoneq_not_supported" % error
+
+        ###########    AN=F, user_speeds specified    ############
+
+        #   if AN supported: AN=false, speeds=first_speed
+        #
+        #     NOTE: We don't currently have a type that is supported
+        #           but not required.
+        #
+
+        #   if AN required: user error! "AN required"
+        sw_set_intf_pm_info(s1, test_intf, ('connector=SFP_RJ45', \
+                                          'connector_status=supported'))
+        short_sleep()
+        sw_set_intf_user_config(s1, test_intf, ['admin=up', 'autoneg=off', \
+                                                          'speeds=1000'])
+        short_sleep()
+        info("Verify AN set=false, user_speeds specified, AN required\n");
+        hw_enable = sw_get_intf_state(s1, test_intf, ['hw_intf_config:enable'])
+        assert hw_enable == "false", "hw_enable should be false and is not"
+        error = sw_get_intf_state(s1, test_intf, ['error'])
+        assert error == "autoneg_required", \
+                      "error is [%s] and should be autoneq_required" % error
+
+        #   if AN not_supported: AN=false, speeds=first_speed
+        short_sleep()
+        sw_set_intf_pm_info(s1, qsfp_intf, ('connector=QSFP_LR4', \
+                                          'connector_status=supported'))
+        short_sleep()
+        sw_set_intf_user_config(s1, qsfp_intf, ['admin=up', 'autoneg=off', \
+                                                        'speeds=40000'])
+        short_sleep()
+
+        info("Verify AN set=false, user_speeds specified, AN unsupported\n");
+        hw_enable = sw_get_intf_state(s1, qsfp_intf, ['hw_intf_config:enable'])
+        assert hw_enable == "true", "hw_enable should be true and is not"
+
+        autoneg, speeds = sw_get_intf_state(s1, qsfp_intf, \
+                        ['hw_intf_config:autoneg', 'hw_intf_config:speeds'])
+
+        assert autoneg == 'off' and speeds == qsfp_fixed, \
+            "autoneg is %s, expected 'off'; speeds is %s, expected %s" \
+                                        % (autoneg, speeds, qsfp_fixed)
+
+        # clear the OVSDB config of the interface 21
+        sw_clear_user_config(s1, test_intf)
+        sw_set_intf_pm_info(s1, test_intf, \
+                ('connector=absent', 'connector_status=unsupported'))
+
+        # clear the OVSDB config of the interface 53
+        sw_clear_user_config(s1, qsfp_intf)
+        sw_set_intf_pm_info(s1, qsfp_intf, \
+                ('connector=absent', 'connector_status=unsupported'))
 
         # clear the OVSDB config of the interface 50
         sw_clear_user_config(s1, split_parent)
-        sw_set_intf_pm_info(s1, split_parent, ('connector=absent', 'connector_status=unsupported'))
-
+        sw_set_intf_pm_info(s1, split_parent, \
+                ('connector=absent', 'connector_status=unsupported'))
 
     def user_config_pause(self):
 
@@ -382,6 +814,7 @@ class intfdTest(HalonTest):
         s1 = self.net.switches[0]
 
         # Set user_config & pm_info to valid values.
+        sw_clear_user_config(s1, test_intf)
         sw_set_intf_user_config(s1, test_intf, ['admin=up'])
         sw_set_intf_pm_info(s1, test_intf, ('connector=SFP_RJ45', 'connector_status=supported'))
         short_sleep()
@@ -413,6 +846,7 @@ class intfdTest(HalonTest):
         info("\n============= intfd user config QSFP splitter tests =============\n")
         s1 = self.net.switches[0]
 
+        sw_clear_user_config(s1, split_parent)
         # Verify that the default state of parent interface is 'admin_down'
         info("Verify that default 'error' status for split parent is 'admin_down'\n")
         out = sw_get_intf_state(s1, split_parent, ['error'])
