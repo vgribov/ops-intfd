@@ -951,9 +951,6 @@ class intfdTest(HalonTest):
 
 class Test_intfd:
 
-    # Create the Mininet topology based on mininet.
-    test = intfdTest()
-
     def setup(self):
         pass
 
@@ -961,6 +958,9 @@ class Test_intfd:
         pass
 
     def setup_class(cls):
+        # Create the Mininet topology based on mininet.
+        Test_intfd.test = intfdTest()
+
         # Stop PMD. This tests manually sets lot of DB elements
         # that 'pmd' is responsible for. To avoid any cross
         # interaction disable 'pmd'
