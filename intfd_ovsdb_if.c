@@ -968,7 +968,9 @@ calc_intf_op_state_n_reason(struct iface *intf)
         intf->op_state.reason = INTERFACE_ERROR_MODULE_UNRECOGNIZED;
 
     /* Checking for unsupported pluggable module. */
-    } else if (intf->pm_info.connector_status == INTERFACE_PM_INFO_CONNECTOR_STATUS_UNSUPPORTED) {
+    } else if ((intf->pm_info.connector_status ==
+                    INTERFACE_PM_INFO_CONNECTOR_STATUS_UNSUPPORTED) ||
+               (intf->pm_info.op_connector_flags == PM_UNSUPPORTED_FLAG)) {
         intf->op_state.reason = INTERFACE_ERROR_MODULE_UNSUPPORTED;
 
     /* Checking for invalid mtu. */

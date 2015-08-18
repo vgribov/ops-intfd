@@ -367,6 +367,16 @@ class intfdTest(HalonTest):
         assert err == 'module_unsupported' and hw_enable == 'false', \
                "Invalid interface status when unsupported pluggable module is inserted"
 
+        # Set pm_info:connector as <unknown to intfd, such as SFP_LX>  and
+        #    connector_status=supported
+        sw_set_intf_pm_info(s1, test_intf, ('connector=SFP_LX', 'connector_status=supported'))
+        short_sleep()
+
+        info("Verify that when connector is unknown to intfd but pmd says supported, error is module_unsupported.\n")
+        err, hw_enable = sw_get_intf_state(s1, test_intf, ['error', 'hw_intf_config:enable'])
+        assert err == 'module_unsupported' and hw_enable == 'false', \
+               "Invalid interface status when intfd unsupported pluggable module is inserted"
+
         # Verify the hw_intf_config:interface_type based on 'pm_info:connector'
         pm_intf_type = {
             'SFP_RJ45' : '1GBASE_T',
