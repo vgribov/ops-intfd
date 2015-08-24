@@ -24,10 +24,10 @@ project (${INTFD})
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -Wall -Werror")
 
 include(FindPkgConfig)
-pkg_check_modules(CONFIG_YAML config-yaml)
-pkg_check_modules(HALONUTILS halonutils)
-pkg_check_modules(OVSCOMMON libovscommon)
-pkg_check_modules(OVSDB libovsdb)
+pkg_check_modules(CONFIG_YAML REQUIRED ops-config-yaml)
+pkg_check_modules(HALONUTILS REQUIRED opsutils)
+pkg_check_modules(OVSCOMMON REQUIRED libovscommon)
+pkg_check_modules(OVSDB REQUIRED libovsdb)
 
 include_directories (${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}
    ${OVSCOMMON_INCLUDE_DIRS})
