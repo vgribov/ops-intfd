@@ -101,7 +101,6 @@
 #ifndef __INTFD_H__
 #define __INTFD_H__
 
-#include <hc-utils.h>
 #include <openvswitch/vlog.h>
 #include <openvswitch/compiler.h>
 

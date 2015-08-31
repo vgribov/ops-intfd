@@ -27,7 +27,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -Wall -Werror")
 
 include(FindPkgConfig)
 pkg_check_modules(CONFIG_YAML REQUIRED ops-config-yaml)
-pkg_check_modules(HALONUTILS REQUIRED opsutils)
+pkg_check_modules(OPSUTILS REQUIRED opsutils)
 pkg_check_modules(OVSCOMMON REQUIRED libovscommon)
 pkg_check_modules(OVSDB REQUIRED libovsdb)
 
@@ -41,7 +41,7 @@ set (SOURCES ${SRC_DIR}/intfd.c ${SRC_DIR}/intfd_ovsdb_if.c ${SRC_DIR}/intfd_uti
 # Rules to build intfd
 add_executable (${INTFD} ${SOURCES})
 
-target_link_libraries (${INTFD} ${HALONUTILS_LIBRARIES} ${CONFIG_YAML_LIBRARIES} ${OVSCOMMON_LIBRARIES}
+target_link_libraries (${INTFD} ${OPSUTILS_LIBRARIES} ${CONFIG_YAML_LIBRARIES} ${OVSCOMMON_LIBRARIES}
                        ${OVSDB_LIBRARIES} ${OPENSSL_LIBRARIES}
                        -lpthread -lrt)
 
