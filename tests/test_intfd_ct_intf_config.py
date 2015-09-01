@@ -22,8 +22,8 @@ import time
 import subprocess
 import pytest
 
-from halonvsi.docker import *
-from halonvsi.halon import *
+from opsvsi.docker import *
+from opsvsi.opsvsitest import *
 
 OVS_VSCTL = "/usr/bin/ovs-vsctl "
 
@@ -80,7 +80,7 @@ def sw_get_intf_state(sw, interface, fields):
     return out
 
 
-class intfdTest(HalonTest):
+class intfdTest(OpsVsiTest):
 
     def setupNet(self):
 
@@ -89,8 +89,8 @@ class intfdTest(HalonTest):
         host_opts = self.getHostOpts()
         switch_opts = self.getSwitchOpts()
         intfd_topo = SingleSwitchTopo(k=1, hopts=host_opts, sopts=switch_opts)
-        self.net = Mininet(intfd_topo, switch=HalonSwitch,
-                           host=Host, link=HalonLink,
+        self.net = Mininet(intfd_topo, switch=VsiOpenSwitch,
+                           host=Host, link=OpsVsiLink,
                            controller=None, build=True)
         self.switch1 = self.net.switches[0]
 
