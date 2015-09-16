@@ -321,12 +321,12 @@ intfd_ovsdb_init(const char *db_path)
     ovsdb_idl_verify_write_only(idl);
 
     /* Choose some OVSDB tables and columns to cache. */
-    ovsdb_idl_add_table(idl, &ovsrec_table_open_vswitch);
+    ovsdb_idl_add_table(idl, &ovsrec_table_system);
     ovsdb_idl_add_table(idl, &ovsrec_table_subsystem);
     ovsdb_idl_add_table(idl, &ovsrec_table_interface);
 
     /* Monitor the following columns, marking them read-only. */
-    ovsdb_idl_add_column(idl, &ovsrec_open_vswitch_col_cur_cfg);
+    ovsdb_idl_add_column(idl, &ovsrec_system_col_cur_cfg);
     ovsdb_idl_add_column(idl, &ovsrec_subsystem_col_name);
     ovsdb_idl_add_column(idl, &ovsrec_subsystem_col_other_info);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_name);
@@ -1510,17 +1510,17 @@ intfd_reconfigure(void)
 static inline bool
 intfd_system_is_configured(void)
 {
-    const struct ovsrec_open_vswitch *vswrow = NULL;
+    const struct ovsrec_system *sysrow = NULL;
 
     if (system_configured) {
         return true;
     }
 
-    vswrow = ovsrec_open_vswitch_first(idl);
+    sysrow = ovsrec_system_first(idl);
 
-    if (vswrow && vswrow->cur_cfg > INT64_C(0)) {
+    if (sysrow && sysrow->cur_cfg > INT64_C(0)) {
         VLOG_DBG("System now configured (cur_cfg=%" PRId64 ").",
-                 vswrow->cur_cfg);
+                 sysrow->cur_cfg);
         return (system_configured = true);
     }
 

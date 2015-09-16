@@ -81,7 +81,7 @@
  *      Interface:name
  *      Interface:pm_info
  *      Interface:user_config
- *      Open_vswitch:cur_cfg
+ *      System:cur_cfg
  *
  *  The following columns are WRITTEN by intfd:
  *
