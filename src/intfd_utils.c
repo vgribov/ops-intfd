@@ -24,7 +24,7 @@
 #include <smap.h>
 #include <openvswitch/vlog.h>
 
-#include <openhalon-idl.h>
+#include <openswitch-idl.h>
 #include <vswitch-idl.h>
 
 VLOG_DEFINE_THIS_MODULE(intfd_utils);
