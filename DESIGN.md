@@ -95,4 +95,4 @@ Internal structure
 
 References
 ----------
-* [pluggable module feature](http://www.openswitch.net/documents/dev/pluggable_modules_design)
+* [pluggable module feature](/documents/user/pluggable_modules_design)
