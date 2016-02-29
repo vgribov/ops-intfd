@@ -1252,8 +1252,11 @@ cli_show_run_interface_exec (struct cmd_element *self, struct vty *vty,
         int flags, int argc, const char *argv[])
 {
     const struct ovsrec_interface *row = NULL;
+    const struct ovsrec_dhcp_relay *row_serv = NULL;
     const char *cur_state =NULL;
     bool bPrinted = false;
+    size_t i = 0;
+    char *helper_ip = NULL;
 
     OVSREC_INTERFACE_FOR_EACH(row, idl)
     {
@@ -1363,6 +1366,24 @@ cli_show_run_interface_exec (struct cmd_element *self, struct vty *vty,
         parse_lacp_othercfg(&row->other_config, row->name, vty, &bPrinted);
 
         print_interface_lag(row->name, vty, &bPrinted);
+
+        /* Displaying the dhcp-relay helper addresses  */
+        OVSREC_DHCP_RELAY_FOR_EACH (row_serv, idl)
+        {
+            /* get the interface details. */
+            if(row_serv->port)
+            {
+                if (!strcmp(row_serv->port->name, row->name))
+                {
+                    for (i = 0; i < row_serv->n_ipv4_ucast_server; i++)
+                    {
+                        helper_ip = row_serv->ipv4_ucast_server[i];
+                        vty_out(vty, "%4s ip helper-address %s%s",
+                                        "", helper_ip, VTY_NEWLINE);
+                    }
+                }
+            }
+        }
 
         if (bPrinted)
         {
