@@ -2485,6 +2485,7 @@ void cli_pre_init(void)
 
     intf_ovsdb_init();
 
+    /* Initialize interface context show running client callback function. */
     retval = install_show_run_config_context(e_vtysh_interface_context,
                                 &vtysh_intf_context_clientcallback,
                                 &vtysh_intf_context_init, &vtysh_intf_context_exit);
@@ -2531,7 +2532,5 @@ void cli_post_init(void)
     install_element (VLAN_INTERFACE_NODE, &cli_intf_shutdown_cmd);
     install_element (VLAN_INTERFACE_NODE, &no_cli_intf_shutdown_cmd);
 
-    /* Initialize interface context show running client callback function. */
-    vtysh_init_intf_context_clients();
     return;
 }
