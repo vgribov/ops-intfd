@@ -2077,6 +2077,7 @@ cli_show_interface_exec (struct cmd_element *self, struct vty *vty,
     int idx, count;
     const struct ovsrec_port *port_row;
     bool internal_if = false;
+    bool isLag = true;
     const struct ovsdb_datum *datum;
     static char *interface_statistics_keys [] = {
         "rx_packets",
@@ -2209,6 +2210,7 @@ cli_show_interface_exec (struct cmd_element *self, struct vty *vty,
         else
         {
             intVal = 0;
+            isLag = false;
             show_interface_status(vty, ifrow, internal_if, brief);
 
             vty_out (vty, " Hardware: Ethernet, MAC Address: %s %s",
@@ -2380,7 +2382,7 @@ cli_show_interface_exec (struct cmd_element *self, struct vty *vty,
     {
         show_lacp_interfaces_brief(vty, argv);
     }
-    else
+    else if (isLag)
     {
         show_lacp_interfaces(vty, interface_statistics_keys, argv);
     }
