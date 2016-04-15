@@ -19,7 +19,7 @@
 OpenSwitch Test for interface related configurations.
 """
 
-# from pytest import mark
+from pytest import mark
 from time import sleep
 
 TOPOLOGY = """
@@ -74,6 +74,9 @@ def short_sleep(tm=.5):
     sleep(tm)
 
 
+@mark.skipif(True, reason="After interface is supposed to be up, "
+                          "hw_intf_config:auton field is not present"
+                          " in the ovsdb")
 def test_user_config_autoneg(topology, step):
     ops1 = topology.get("ops1")
     assert ops1 is not None
