@@ -484,6 +484,21 @@ get_matching_port_row(const char *name)
     return NULL;
 }
 
+struct ovsrec_interface *
+get_matching_interface_row(const char *name)
+{
+    const struct ovsrec_interface *intf_row = NULL;
+
+    /* find out which port has this interface associated with it */
+    OVSREC_INTERFACE_FOR_EACH(intf_row, idl) {
+        if (!strcmp(intf_row->name, name)) {
+            return (struct ovsrec_interface *)intf_row;
+        }
+    }
+
+    return NULL;
+}
+
 static int
 port_parse_admin(enum ovsrec_port_config_admin_e  *port_admin,
                  const struct ovsrec_interface *ifrow)
@@ -1910,6 +1925,13 @@ port_reconfigure(void)
          * Use SHASH_FOR_EACH_SAFE since del_old_interface()
          * will delete the current node. */
     } else if (OVSREC_IDL_ANY_TABLE_ROWS_DELETED(port_row, idl_seqno)) {
+       /* Do not delete old ports if virtual inetrfaces are getting deleted.*/
+        struct ovsrec_interface *intf = get_matching_interface_row(port_row->name);
+        if ((intf) && ((STR_EQ(intf->type, OVSREC_INTERFACE_TYPE_VLANSUBINT))
+                   ||  (STR_EQ(intf->type, OVSREC_INTERFACE_TYPE_LOOPBACK))
+                   ||  (STR_EQ(intf->type, OVSREC_INTERFACE_TYPE_INTERNAL)))) {
+           goto end;
+        }
         SHASH_FOR_EACH_SAFE(sh_node, sh_next, &all_ports) {
             struct ovsrec_port *port = shash_find_data(&sh_idl_ports, sh_node->name);
             if (!port) {
@@ -1920,7 +1942,6 @@ port_reconfigure(void)
             }
         }
     }
-
 
     /* Number of interfaces/admin state modified. So it could be
        adding more interfaces to port or removing more interfaces from port*/
