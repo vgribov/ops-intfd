@@ -2734,7 +2734,7 @@ show_interface_status(struct vty *vty, const const struct ovsrec_interface *ifro
         }
     }
     else
-     {
+    {
         vty_out (vty, "Interface %s is ", ifrow->name);
         state_value = smap_get(&ifrow->user_config,
                                INTERFACE_USER_CONFIG_MAP_ADMIN);
@@ -2968,7 +2968,7 @@ cli_show_interface_exec (struct cmd_element *self, struct vty *vty,
                   || strcmp(state_value,
                                      INTERFACE_USER_CONFIG_MAP_LANE_SPLIT_SPLIT))
             {
-                VLOG_ERR("Skipped child int %s, split_config of parent= %s", ifrow->name, state_value);
+                VLOG_DBG("Skipped child int %s, split_config of parent= %s", ifrow->name, state_value);
 
                /* can't show child interface config when parent is not split */
                if ((argv[0] != NULL) && !strcmp(ifrow->name, argv[0])) {
@@ -3932,7 +3932,6 @@ intf_ovsdb_init(void)
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_name);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_lldp_statistics);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_other_config);
-    ovsdb_idl_add_column(idl, &ovsrec_interface_col_link_state);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_lldp_neighbor_info);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_user_config);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_link_state);
