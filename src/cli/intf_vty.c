@@ -2896,13 +2896,13 @@ display_header(bool brief) {
         /* Display the brief information */
         vty_out(vty, "%s", VTY_NEWLINE);
         vty_out(vty, "--------------------------------------------------"
-                     "------------------------------%s", VTY_NEWLINE);
+                     "---------------------------------%s", VTY_NEWLINE);
         vty_out(vty, "Ethernet         VLAN    Type Mode   Status  Reason  "
                      "                 Speed    Port%s", VTY_NEWLINE);
         vty_out(vty, "Interface                                            "
                      "                 (Mb/s)   Ch#%s", VTY_NEWLINE);
         vty_out(vty, "--------------------------------------------------"
-                     "------------------------------%s", VTY_NEWLINE);
+                     "---------------------------------%s", VTY_NEWLINE);
     }
     else {
         vty_out (vty, "%s", VTY_NEWLINE);
@@ -3033,7 +3033,13 @@ cli_show_interface_exec (struct cmd_element *self, struct vty *vty,
 
             if (strcmp(OVSREC_INTERFACE_USER_CONFIG_ADMIN_DOWN, ifrow->link_state) == 0 ){
                 user_config_speed = smap_get(&ifrow->user_config, INTERFACE_USER_CONFIG_MAP_SPEEDS);
-                vty_out(vty,"%-6s", user_config_speed);
+                if (user_config_speed != NULL) {
+                    vty_out(vty,"%-6s", user_config_speed);
+                }
+                else
+                {
+                    vty_out(vty," --    ");
+                }
             }
             else
             {
@@ -3053,7 +3059,7 @@ cli_show_interface_exec (struct cmd_element *self, struct vty *vty,
                     vty_out(vty, " %-6ld", intVal/1000000);
                 }
             }
-            vty_out(vty, "  -- ");  /* Port channel */
+            vty_out(vty, "   -- ");  /* Port channel */
             vty_out (vty, "%s", VTY_NEWLINE);
         }
         else
