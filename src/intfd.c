@@ -67,7 +67,7 @@
 
 VLOG_DEFINE_THIS_MODULE(ops_intfd);
 
-#define DIAGNOSTIC_BUFFER_LEN 16000
+#define DIAGNOSTIC_BUFFER_LEN 16000    /*One interface= 700 characters*/
 
 /** @ingroup ops-intfd
  * @{ */
@@ -113,12 +113,13 @@ static void
 intfd_diag_dump_basic_cb(const char *feature , char **buf)
 {
     struct ds ds1 = DS_EMPTY_INITIALIZER;
+    const char *argv[]= { "1", "1", NULL};
     if (!buf)
         return;
     *buf = xcalloc(1, DIAGNOSTIC_BUFFER_LEN);
     if(*buf) {
         /* populate basic diagnostic data to buffer  */
-        intfd_debug_dump(&ds1, 0, NULL);
+        intfd_debug_dump(&ds1, 3, argv);
         sprintf(*buf, "%s", ds_cstr(&ds1));
         VLOG_INFO("basic diag-dump data populated for feature %s", feature);
     } else{
