@@ -54,6 +54,20 @@ void ifTableifIndex_custom_function(const struct ovsdb_idl *idl,
 }
 
 
+void ifMtu_custom_function(const struct ovsdb_idl *idl,
+                           const struct ovsrec_interface *interface_row,
+                           long *ifMtu_val_ptr) {
+    const struct ovsdb_datum *datum;
+
+    datum = ovsrec_interface_get_mtu(interface_row, OVSDB_TYPE_INTEGER);
+    if ((NULL!=datum) && (datum->n >0)) {
+        *ifMtu_val_ptr = (long)datum->keys[0].integer;
+    }
+    else {
+        *ifMtu_val_ptr = 0;
+    }
+
+}
 
 void ifAdminStatus_custom_function(const struct ovsdb_idl *idl,
                                    const struct ovsrec_interface *interface_row,
