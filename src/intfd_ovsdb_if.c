@@ -274,6 +274,7 @@ get_connector_flags(enum ovsrec_interface_pm_info_connector_e connector)
         break;
     case INTERFACE_PM_INFO_CONNECTOR_SFP_SR:
     case INTERFACE_PM_INFO_CONNECTOR_SFP_LR:
+    case INTERFACE_PM_INFO_CONNECTOR_SFP_LRM:
     case INTERFACE_PM_INFO_CONNECTOR_SFP_DAC:
         return PM_SFP_PLUS_FLAGS;
         break;
@@ -297,7 +298,6 @@ get_connector_flags(enum ovsrec_interface_pm_info_connector_e connector)
     case INTERFACE_PM_INFO_CONNECTOR_SFP_LX:
     case INTERFACE_PM_INFO_CONNECTOR_SFP_CX:
     case INTERFACE_PM_INFO_CONNECTOR_SFP_FC:
-    case INTERFACE_PM_INFO_CONNECTOR_SFP_LRM:
     case INTERFACE_PM_INFO_CONNECTOR_QSFP28_PSM4:
     case INTERFACE_PM_INFO_CONNECTOR_QSFP28_CWDM4:
     case INTERFACE_PM_INFO_CONNECTOR_QSFP28_CLR4:
