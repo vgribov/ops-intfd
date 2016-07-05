@@ -127,10 +127,19 @@ def sw_get_intf_state(dut, int, fields):
     for f in fields:
         c += " {f}".format(f=f)
     out = dut(c, shell="vsctl").splitlines()
+
+    # Remove any element from the out, that is similar to the sent command
+    out = [line for line in out if 'ovs-vsctl' not in line]
+
+    if len(out) != len(fields):
+        # Change return to invalid values to verified, instead a singleton
+        # that broke the test case.
+        [None for _ in range(len(fields))]
     # If a single column value is requested,
     # then return a singleton value instead of list.
-    if len(out) == 1:
+    elif len(out) == 1:
         out = out[0]
+
     return out
 
 
@@ -251,7 +260,7 @@ def test_user_configuration(topology, step):
     assert mtu == '"1000"' and hw_enable == '"true"'
 
     step("Step 16- Set MTU above allowed range.")
-    sw_set_intf_user_config(ops1, test_intf, ['mtu=2000'])
+    sw_set_intf_user_config(ops1, test_intf, ['mtu=9300'])
     short_sleep()
 
     error = sw_get_intf_state(ops1, test_intf, ['error'])
