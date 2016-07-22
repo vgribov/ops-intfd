@@ -2193,6 +2193,10 @@ int cli_show_xvr_exec (struct cmd_element *self, struct vty *vty,
             /* Display transceiver information */
             vty_out (vty, "Interface %s:%s", ifrow->name, VTY_NEWLINE);
 
+            if (strcmp(ifrow->type, OVSREC_INTERFACE_TYPE_VLANSUBINT) == 0)
+            {
+                vty_out(vty, "Not supported by subinterface%s", VTY_NEWLINE);
+            }
             cur_state = smap_get(&ifrow->hw_intf_info,
                     INTERFACE_HW_INTF_INFO_MAP_CONNECTOR);
             if (NULL != cur_state)
@@ -3558,6 +3562,10 @@ int cli_show_xvr_dom_exec (struct cmd_element *self, struct vty *vty,
         /* Display transceiver information */
         vty_out (vty, "Interface %s:%s", ifrow->name, VTY_NEWLINE);
 
+        if (strcmp(ifrow->type, OVSREC_INTERFACE_TYPE_VLANSUBINT) == 0)
+        {
+            vty_out(vty, "Not supported by subinterface%s", VTY_NEWLINE);
+        }
         cur_state = smap_get(&ifrow->hw_intf_info,
                              INTERFACE_HW_INTF_INFO_MAP_CONNECTOR);
         if (NULL != cur_state)
