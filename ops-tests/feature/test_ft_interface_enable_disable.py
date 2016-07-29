@@ -107,6 +107,8 @@ def test_ft_interface_enable_disable(topology):
 
     # Enable interface 1 and verify that ping succeeds :
     interface_enable(ops1, p1)
+    # Adding small delay for the interface to be enabled
+    sleep(5)
     admin_state = ovs_chek(ops1, p1)
     assert admin_state == 'up'
     sleep(5)
