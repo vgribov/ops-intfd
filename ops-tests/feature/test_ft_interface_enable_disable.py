@@ -87,7 +87,9 @@ def test_ft_interface_enable_disable(topology):
 
     # Configure interfaces 1 and 2 with interface 1 is down
     interface_disable(ops1, p1)
+    sleep(5)
     interface_enable(ops1, p2)
+    sleep(5)
     admin_state = ovs_chek(ops1, p1)
     assert admin_state == 'down'
 
@@ -119,6 +121,7 @@ def test_ft_interface_enable_disable(topology):
 
     # Disable interface 1 and verify that ping succeeds :
     interface_disable(ops1, p1)
+    sleep(5)
     admin_state = ovs_chek(ops1, p1)
     assert admin_state == 'down'
     sleep(5)
