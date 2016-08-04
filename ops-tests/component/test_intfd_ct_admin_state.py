@@ -81,8 +81,10 @@ def test_intfd_ct_admin_state(topology, step):
     assert "enable=\"true\"" in out
 
     step("Step 6- Change the admin state of port to down")
-    ops1("ovs-vsctl set interface {port} user_config:admin=down".format(
-         port=port), shell="bash")
+    # Increaseing timeout for command
+    bash = ops1.get_shell('bash')
+    bash.send_command("ovs-vsctl set interface {port} user_config:admin=down".format(
+         port=port), timeout=120)
 
     step("Step 7- Verify the interface associated to the port is down")
     # sleep(2)
