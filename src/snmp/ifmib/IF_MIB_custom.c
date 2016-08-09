@@ -92,22 +92,46 @@ void ifAdminStatus_custom_function(const struct ovsdb_idl *idl,
 void ifOperStatus_custom_function(const struct ovsdb_idl *idl,
                                   const struct ovsrec_interface *interface_row,
                                   long *ifOperStatus_val_ptr) {
-    if (strncmp(interface_row->admin_state,
-                OVSREC_INTERFACE_ADMIN_STATE_UP,
-                MAX_ADMIN_STATE_LENGTH) == 0 ) {
-        *ifOperStatus_val_ptr = 1;
-    }
-    else if (strncmp(interface_row->admin_state,
-                     OVSREC_INTERFACE_ADMIN_STATE_DOWN,
-                     MAX_ADMIN_STATE_LENGTH) == 0 ) {
-        *ifOperStatus_val_ptr = 2;
-    }
-    else if (strncmp(interface_row->admin_state,
-                     "testing", MAX_ADMIN_STATE_LENGTH) == 0 ) {
-        *ifOperStatus_val_ptr = 3;
+    if (interface_row->link_state != NULL) {
+        if (strncmp(interface_row->link_state,
+                    OVSREC_INTERFACE_LINK_STATE_UP,
+                    MAX_LINK_STATE_LENGTH) == 0 ) {
+            *ifOperStatus_val_ptr = 1;
+        }
+        else if (strncmp(interface_row->link_state,
+                         OVSREC_INTERFACE_LINK_STATE_DOWN,
+                         MAX_LINK_STATE_LENGTH) == 0 ) {
+            *ifOperStatus_val_ptr = 2;
+        }
+        else if (strncmp(interface_row->link_state,
+                         "testing", MAX_LINK_STATE_LENGTH) == 0 ) {
+            *ifOperStatus_val_ptr = 3;
+        }
     }
 }
 
+void ifSpeed_custom_function(const struct ovsdb_idl *idl,
+                             const struct ovsrec_interface *interface_row,
+                             u_long *ifSpeed_val_ptr) {
+    *ifSpeed_val_ptr = 0;
+
+    if (interface_row->link_state != NULL) {
+        if (strncmp(interface_row->link_state,
+                    OVSREC_INTERFACE_LINK_STATE_UP,
+                    MAX_LINK_STATE_LENGTH) == 0 ) {
+            const struct ovsdb_datum *datum;
+            datum = ovsrec_interface_get_link_speed(interface_row, OVSDB_TYPE_INTEGER);
+            if ((NULL!=datum) && (datum->n >0)) {
+                if((long)datum->keys[0].integer >= 4294967295) {
+                    *ifSpeed_val_ptr = 4294967295;
+                }
+                else {
+                    *ifSpeed_val_ptr = (long)datum->keys[0].integer;
+                }
+            }
+        }
+    }
+}
 
 void ifPhysAddress_custom_function(const struct ovsdb_idl *idl,
                                    const struct ovsrec_interface *interface_row,
@@ -460,13 +484,31 @@ void ifHCOutBroadcastPkts_custom_function(
     *ifHCOutBroadcastPkts_val_ptr = 0;
 }
 
+void ifHighSpeed_custom_function(const struct ovsdb_idl *idl,
+                                 const struct ovsrec_interface *interface_row,
+                                 u_long *ifHighSpeed_val_ptr) {
+    *ifHighSpeed_val_ptr= 0;
+
+    if (interface_row->link_state != NULL)
+    {
+        if (strncmp(interface_row->link_state,
+                    OVSREC_INTERFACE_LINK_STATE_UP,
+                    MAX_LINK_STATE_LENGTH) == 0 ){
+            const struct ovsdb_datum *datum;
+            datum = ovsrec_interface_get_link_speed(interface_row, OVSDB_TYPE_INTEGER);
+            if ((NULL!=datum) && (datum->n >0)) {
+                *ifHighSpeed_val_ptr =((long)datum->keys[0].integer)/1000000;
+            }
+        }
+    }
+}
+
 void ifLinkUpDownTrapEnable_custom_function(
     const struct ovsdb_idl *idl,
     const struct ovsrec_interface *interface_row,
     long *ifLinkUpDownTrapEnable_val_ptr){
     *ifLinkUpDownTrapEnable_val_ptr = 0;
 }
-
 
 void ifConnectorPresent_custom_function(
     const struct ovsdb_idl *idl,

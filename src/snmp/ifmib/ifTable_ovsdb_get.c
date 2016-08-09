@@ -9,9 +9,10 @@ VLOG_DEFINE_THIS_MODULE (ifmib_snmp);
 
 void ifTable_ovsdb_idl_init(struct ovsdb_idl *idl) {
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_statistics);
-    ovsdb_idl_add_column(idl, &ovsrec_interface_col_hw_intf_info);
+    ovsdb_idl_add_column(idl, &ovsrec_interface_col_link_speed);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_mac_in_use);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_admin_state);
+    ovsdb_idl_add_column(idl, &ovsrec_interface_col_link_state);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_user_config);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_mtu);
     ovsdb_idl_add_column(idl, &ovsrec_interface_col_name);
@@ -53,12 +54,7 @@ void ovsdb_get_ifMtu(struct ovsdb_idl *idl,
 void ovsdb_get_ifSpeed(struct ovsdb_idl *idl,
                        const struct ovsrec_interface *interface_row,
                        u_long *ifSpeed_val_ptr) {
-    char *temp = (char *)smap_get(&interface_row->hw_intf_info, "max_speed");
-    if (temp == NULL) {
-        *ifSpeed_val_ptr = 0;
-    } else {
-        *ifSpeed_val_ptr = (u_long)atoi(temp);
-    }
+    ifSpeed_custom_function(idl, interface_row, ifSpeed_val_ptr);
 }
 
 void ovsdb_get_ifPhysAddress(struct ovsdb_idl *idl,

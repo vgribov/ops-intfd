@@ -6,6 +6,7 @@
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
 #define MAX_ADMIN_STATE_LENGTH 8
+#define MAX_LINK_STATE_LENGTH 8
 #define MAC_ADDRESS_OCTATES 6
 int ifTable_skip_function(const struct ovsdb_idl *idl,
                           const struct ovsrec_interface *interface_row);
@@ -30,6 +31,10 @@ void ifType_custom_function(const struct ovsdb_idl *idl,
 void ifMtu_custom_function(const struct ovsdb_idl *idl,
                            const struct ovsrec_interface *interface_row,
                            long *ifMtu_val_ptr);
+
+void ifSpeed_custom_function(const struct ovsdb_idl *idl,
+                             const struct ovsrec_interface *interface_row,
+                             u_long *ifSpeed_val_ptr);
 
 void ifPhysAddress_custom_function(
     const struct ovsdb_idl *idl,
@@ -168,7 +173,7 @@ void ifLinkUpDownTrapEnable_custom_function(
     long *ifLinkUpDownTrapEnable_val_ptr);
 
 void ifHighSpeed_custom_function(const struct ovsdb_idl *idl,
-    const struct ovsrec_interface *interface_row, long *ifHighSpeed_val_ptr);
+    const struct ovsrec_interface *interface_row, u_long *ifHighSpeed_val_ptr);
 
 void ifPromiscuousMode_custom_function(
     const struct ovsdb_idl *idl, const struct ovsrec_interface *interface_row,
