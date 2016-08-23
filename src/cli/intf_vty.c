@@ -1071,7 +1071,7 @@ remove_port_and_references(const char *if_name)
             for (i = 0; i < port_row->n_interfaces; i++) {
                 intf_row = port_row->interfaces[i];
                 if (strncmp(intf_row->name, if_name, strlen(intf_row->name)) == 0) {
-                   remove_interface_from_lag_port(port_row, intf_row);
+                    remove_interface_from_lag_port(port_row, intf_row);
                 }
             }
         }
@@ -1090,6 +1090,7 @@ static void
 handle_port_config (const struct ovsrec_interface *if_row, bool split)
 {
     int i;
+    struct smap smap_user_config;
     if (!if_row) {
         VLOG_ERR("Interface row is empty");
         return;
@@ -1100,6 +1101,10 @@ handle_port_config (const struct ovsrec_interface *if_row, bool split)
     else {
         for (i = 0; i < if_row->n_split_children; i++) {
             remove_port_and_references(if_row->split_children[i]->name);
+            smap_clone(&smap_user_config, &if_row->split_children[i]->user_config);
+            smap_replace(&smap_user_config,INTERFACE_USER_CONFIG_MAP_ADMIN,
+                OVSREC_INTERFACE_USER_CONFIG_ADMIN_DOWN);
+            ovsrec_interface_set_user_config(if_row->split_children[i], &smap_user_config);
         }
     }
 }
