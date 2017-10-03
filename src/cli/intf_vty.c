@@ -23,6 +23,7 @@
  * Purpose:  To add Interface/Port related configuration and display commands.
  */
 
+#include <inttypes.h>
 #include <sys/un.h>
 #include <setjmp.h>
 #include <sys/wait.h>
@@ -1273,15 +1274,15 @@ parse_vlan(const char *if_name, struct vty* vty)
     }
     else if (strcmp(port_row->vlan_mode, OVSREC_PORT_VLAN_MODE_ACCESS) == 0)
     {
-        vty_out(vty, "%3s%s%ld%s", "", "vlan access ",
-                (int64_t)ops_port_get_tag(port_row), VTY_NEWLINE);
+        vty_out(vty, "%3s%s%d%s", "", "vlan access ",
+                ops_port_get_tag(port_row), VTY_NEWLINE);
     }
     else if (strcmp(port_row->vlan_mode, OVSREC_PORT_VLAN_MODE_TRUNK) == 0)
     {
         for (i = 0; i < port_row->n_vlan_trunks; i++)
         {
-            vty_out(vty, "%3s%s%ld%s", "", "vlan trunk allowed ",
-                    (int64_t)ops_port_get_trunks(port_row, i), VTY_NEWLINE);
+            vty_out(vty, "%3s%s%d%s", "", "vlan trunk allowed ",
+                    ops_port_get_trunks(port_row, i), VTY_NEWLINE);
         }
     }
     else if (strcmp(port_row->vlan_mode,
@@ -1289,13 +1290,13 @@ parse_vlan(const char *if_name, struct vty* vty)
     {
         if (port_row->vlan_tag != NULL)
         {
-            vty_out(vty, "%3s%s%ld%s", "", "vlan trunk native ",
-                    (int64_t)ops_port_get_tag(port_row), VTY_NEWLINE);
+            vty_out(vty, "%3s%s%d%s", "", "vlan trunk native ",
+                    ops_port_get_tag(port_row), VTY_NEWLINE);
         }
         for (i = 0; i < port_row->n_vlan_trunks; i++)
         {
-            vty_out(vty, "%3s%s%ld%s", "", "vlan trunk allowed ",
-                    (int64_t)ops_port_get_trunks(port_row, i), VTY_NEWLINE);
+            vty_out(vty, "%3s%s%d%s", "", "vlan trunk allowed ",
+                    ops_port_get_trunks(port_row, i), VTY_NEWLINE);
         }
     }
     else if (strcmp(port_row->vlan_mode,
@@ -1303,14 +1304,14 @@ parse_vlan(const char *if_name, struct vty* vty)
     {
         if (port_row->vlan_tag != NULL)
         {
-            vty_out(vty, "%3s%s%ld%s", "", "vlan trunk native ",
-                    (int64_t)ops_port_get_tag(port_row), VTY_NEWLINE);
+            vty_out(vty, "%3s%s%d%s", "", "vlan trunk native ",
+                    ops_port_get_tag(port_row), VTY_NEWLINE);
         }
         vty_out(vty, "%3s%s%s", "", "vlan trunk native tag",VTY_NEWLINE);
         for (i = 0; i < port_row->n_vlan_trunks; i++)
         {
-            vty_out(vty, "%3s%s%ld%s", "", "vlan trunk allowed ",
-                    (int64_t)ops_port_get_trunks(port_row, i), VTY_NEWLINE);
+            vty_out(vty, "%3s%s%d%s", "", "vlan trunk allowed ",
+                    ops_port_get_trunks(port_row, i), VTY_NEWLINE);
         }
     }
 
@@ -1435,30 +1436,30 @@ print_interface_ospf(const char *if_name, struct vty *vty, bool *bPrinted)
     interval = ospf_get_port_intervals(port_row,
                                        OSPF_KEY_HELLO_INTERVAL);
     if ((interval > 0) && (interval != OSPF_HELLO_INTERVAL_DEFAULT))
-        vty_out(vty, "%4s%s %ld%s", " ",
+        vty_out(vty, "%4s%s %" PRIi64 "%s", " ",
                            "ip ospf hello-interval", interval, VTY_NEWLINE);
 
     interval = ospf_get_port_intervals(port_row, OSPF_KEY_DEAD_INTERVAL);
     if ((interval > 0) && (interval != OSPF_DEAD_INTERVAL_DEFAULT))
-        vty_out(vty, "%4s%s %ld%s", " ",
+        vty_out(vty, "%4s%s %" PRIi64 "%s", " ",
                               "ip ospf dead-interval", interval, VTY_NEWLINE);
 
     interval = ospf_get_port_intervals(port_row,
                                        OSPF_KEY_RETRANSMIT_INTERVAL);
     if ((interval > 0) && (interval != OSPF_RETRANSMIT_INTERVAL_DEFAULT))
-        vty_out(vty, "%4s%s %ld%s", " ", "ip ospf retransmit-interval",
+        vty_out(vty, "%4s%s %" PRIi64 "%s", " ", "ip ospf retransmit-interval",
                 interval, VTY_NEWLINE);
 
     interval = ospf_get_port_intervals(port_row, OSPF_KEY_TRANSMIT_DELAY);
     if ((interval > 0) && (interval != OSPF_TRANSMIT_DELAY_DEFAULT))
-        vty_out(vty, "%4s%s %ld%s", " ",
+        vty_out(vty, "%4s%s %" PRIi64 "%s", " ",
                               "ip ospf transmit-delay", interval, VTY_NEWLINE);
 
     if (port_row->ospf_priority &&
         (*port_row->ospf_priority != 1))
     {
         int_val = *port_row->ospf_priority;
-        vty_out(vty, "%4s%s %ld%s", " ",
+        vty_out(vty, "%4s%s %" PRIi64 "%s", " ",
                               "ip ospf priority", int_val, VTY_NEWLINE);
     }
 
@@ -1471,7 +1472,7 @@ print_interface_ospf(const char *if_name, struct vty *vty, bool *bPrinted)
         (*port_row->ospf_if_out_cost != OSPF_DEFAULT_COST))
     {
         int_val = *port_row->ospf_if_out_cost;
-        vty_out(vty, "%4s%s %ld%s", " ",
+        vty_out(vty, "%4s%s %" PRIi64 "%s", " ",
                               "ip ospf cost", int_val, VTY_NEWLINE);
     }
 
@@ -1498,7 +1499,7 @@ print_interface_ospf(const char *if_name, struct vty *vty, bool *bPrinted)
 
     for (i = 0; i < port_row->n_ospf_auth_md5_keys; i++)
     {
-        vty_out(vty, "%4sip ospf message-digest-key %ld md5 %s%s", " ",
+        vty_out(vty, "%4sip ospf message-digest-key %" PRIi64 " md5 %s%s", " ",
                               port_row->key_ospf_auth_md5_keys[i],
                               port_row->value_ospf_auth_md5_keys[i],
                               VTY_NEWLINE);
@@ -2351,7 +2352,7 @@ show_lacp_interfaces_brief (struct vty *vty, const char *argv[])
         vty_out(vty, " %-15s ", lag_port->name);
         /* Display vid for an lag interface */
         if (lag_port->vlan_tag != NULL ) {
-            vty_out(vty, "%-8ld", (int64_t)ops_port_get_tag(lag_port)); /*vid */
+            vty_out(vty, "%-8d", ops_port_get_tag(lag_port)); /*vid */
         }
         else {
             vty_out(vty, "--      "); /*vid */
@@ -2395,7 +2396,7 @@ show_lacp_interfaces_brief (struct vty *vty, const char *argv[])
         }
         else
         {
-            vty_out(vty, " %-6ld", lag_speed/1000000);
+            vty_out(vty, " %-6" PRIi64, lag_speed/1000000);
         }
 
         vty_out(vty, "   -- ");  /* Port channel */
@@ -2489,7 +2490,7 @@ show_lacp_queue_stats (struct vty *vty, char* interface_queue_stats_keys[],
         }
 
         vty_out(vty, "%s", VTY_NEWLINE);
-        vty_out(vty, " Speed %ld Mb/s %s",lag_speed/1000000 , VTY_NEWLINE);
+        vty_out(vty, " Speed %" PRIi64 " Mb/s %s", lag_speed/1000000, VTY_NEWLINE);
         vty_out(vty, "     %20s  %20s  %20s", interface_queue_stats_keys[0],
                                               interface_queue_stats_keys[1],
                                               interface_queue_stats_keys[2]);
@@ -2498,9 +2499,9 @@ show_lacp_queue_stats (struct vty *vty, char* interface_queue_stats_keys[],
         for (q=0; q<QOS_MAX_QUEUES; q++)
         {
             vty_out(vty, " Q%d", q);
-            vty_out(vty, "  %20ld", lag_queue_stats[0][q]);
-            vty_out(vty, "  %20ld", lag_queue_stats[1][q]);
-            vty_out(vty, "  %20ld", lag_queue_stats[2][q]);
+            vty_out(vty, "  %20" PRIi64, lag_queue_stats[0][q]);
+            vty_out(vty, "  %20" PRIi64, lag_queue_stats[1][q]);
+            vty_out(vty, "  %20" PRIi64, lag_queue_stats[2][q]);
             vty_out(vty, "%s", VTY_NEWLINE);
         }
         vty_out(vty, "%s", VTY_NEWLINE);
@@ -2609,7 +2610,7 @@ show_lacp_interfaces (struct vty *vty, char* interface_statistics_keys[],
                     VTY_NEWLINE);
         }
 
-        vty_out(vty, " Speed %ld Mb/s %s",lag_speed/1000000 , VTY_NEWLINE);
+        vty_out(vty, " Speed %" PRIi64 " Mb/s %s",lag_speed/1000000 , VTY_NEWLINE);
 
         qos_trust_port_show(lag_port, lag_port->name);
         qos_apply_port_show(lag_port, lag_port->name);
@@ -2617,27 +2618,27 @@ show_lacp_interfaces (struct vty *vty, char* interface_statistics_keys[],
         qos_dscp_port_show(lag_port, lag_port->name);
 
         vty_out(vty, " RX%s", VTY_NEWLINE);
-        vty_out(vty, "   %10lu input packets  ", lag_statistics[0]);
-        vty_out(vty, "   %10lu bytes  ",lag_statistics[1]);
+        vty_out(vty, "   %10" PRIu64 " input packets  ", lag_statistics[0]);
+        vty_out(vty, "   %10" PRIu64 " bytes  ",lag_statistics[1]);
         vty_out(vty, "%s", VTY_NEWLINE);
 
-        vty_out(vty, "   %10lu input error    ",lag_statistics[8]);
-        vty_out(vty, "   %10lu dropped  ",lag_statistics[4]);
+        vty_out(vty, "   %10" PRIu64 " input error    ",lag_statistics[8]);
+        vty_out(vty, "   %10" PRIu64 " dropped  ",lag_statistics[4]);
         vty_out(vty, "%s", VTY_NEWLINE);
 
-        vty_out(vty, "   %10lu CRC/FCS  ",lag_statistics[7]);
+        vty_out(vty, "   %10" PRIu64 " CRC/FCS  ",lag_statistics[7]);
         vty_out(vty, "%s", VTY_NEWLINE);
         vty_out(vty, " TX%s", VTY_NEWLINE);
 
-        vty_out(vty, "   %10lu output packets ",lag_statistics[2]);
-        vty_out(vty, "   %10lu bytes  ",lag_statistics[3]);
+        vty_out(vty, "   %10" PRIu64 " output packets ",lag_statistics[2]);
+        vty_out(vty, "   %10" PRIu64 " bytes  ",lag_statistics[3]);
         vty_out(vty, "%s", VTY_NEWLINE);
 
-        vty_out(vty, "   %10lu input error    ",lag_statistics[11]);
-        vty_out(vty, "   %10lu dropped  ",lag_statistics[9]);
+        vty_out(vty, "   %10" PRIu64 " input error    ",lag_statistics[11]);
+        vty_out(vty, "   %10" PRIu64 " dropped  ",lag_statistics[9]);
         vty_out(vty, "%s", VTY_NEWLINE);
 
-        vty_out(vty, "   %10lu collision  ",lag_statistics[10]);
+        vty_out(vty, "   %10" PRIu64 " collision  ",lag_statistics[10]);
         vty_out(vty, "%s", VTY_NEWLINE);
     }
 
@@ -2667,27 +2668,27 @@ show_interface_stats(struct vty *vty, const struct ovsrec_interface *ifrow,
 
     atom.string = interface_statistics_keys[0];
     index = ovsdb_datum_find_key(datum, &atom, OVSDB_TYPE_STRING);
-    vty_out(vty, "   %10ld input packets  ",
+    vty_out(vty, "   %10" PRIi64 " input packets  ",
             (index == UINT_MAX)? 0 : datum->values[index].integer);
     atom.string = interface_statistics_keys[1];
     index = ovsdb_datum_find_key(datum, &atom, OVSDB_TYPE_STRING);
-    vty_out(vty, "   %10ld bytes  ",
+    vty_out(vty, "   %10" PRIi64 " bytes  ",
             (index == UINT_MAX)? 0 : datum->values[index].integer);
     vty_out(vty, "%s", VTY_NEWLINE);
 
     atom.string = interface_statistics_keys[8];
     index = ovsdb_datum_find_key(datum, &atom, OVSDB_TYPE_STRING);
-    vty_out(vty, "   %10ld input error    ",
+    vty_out(vty, "   %10" PRIi64 " input error    ",
             (index == UINT_MAX)? 0 : datum->values[index].integer);
     atom.string = interface_statistics_keys[4];
     index = ovsdb_datum_find_key(datum, &atom, OVSDB_TYPE_STRING);
-    vty_out(vty, "   %10ld dropped  ",
+    vty_out(vty, "   %10" PRIi64 " dropped  ",
             (index == UINT_MAX)? 0 : datum->values[index].integer);
     vty_out(vty, "%s", VTY_NEWLINE);
 
     atom.string = interface_statistics_keys[7];
     index = ovsdb_datum_find_key(datum, &atom, OVSDB_TYPE_STRING);
-    vty_out(vty, "   %10ld CRC/FCS  ",
+    vty_out(vty, "   %10" PRIi64 " CRC/FCS  ",
             (index == UINT_MAX)? 0 : datum->values[index].integer);
     vty_out(vty, "%s", VTY_NEWLINE);
 
@@ -2698,27 +2699,27 @@ show_interface_stats(struct vty *vty, const struct ovsrec_interface *ifrow,
 
     atom.string = interface_statistics_keys[2];
     index = ovsdb_datum_find_key(datum, &atom, OVSDB_TYPE_STRING);
-    vty_out(vty, "   %10ld output packets ",
+    vty_out(vty, "   %10" PRIi64 " output packets ",
             (index == UINT_MAX)? 0 : datum->values[index].integer);
     atom.string = interface_statistics_keys[3];
     index = ovsdb_datum_find_key(datum, &atom, OVSDB_TYPE_STRING);
-    vty_out(vty, "   %10ld bytes  ",
+    vty_out(vty, "   %10" PRIi64 " bytes  ",
             (index == UINT_MAX)? 0 : datum->values[index].integer);
     vty_out(vty, "%s", VTY_NEWLINE);
 
     atom.string = interface_statistics_keys[11];
     index = ovsdb_datum_find_key(datum, &atom, OVSDB_TYPE_STRING);
-    vty_out(vty, "   %10ld input error    ",
+    vty_out(vty, "   %10" PRIi64 " input error    ",
             (index == UINT_MAX)? 0 : datum->values[index].integer);
     atom.string = interface_statistics_keys[9];
     index = ovsdb_datum_find_key(datum, &atom, OVSDB_TYPE_STRING);
-    vty_out(vty, "   %10ld dropped  ",
+    vty_out(vty, "   %10" PRIi64 " dropped  ",
             (index == UINT_MAX)? 0 : datum->values[index].integer);
     vty_out(vty, "%s", VTY_NEWLINE);
 
     atom.string = interface_statistics_keys[10];
     index = ovsdb_datum_find_key(datum, &atom, OVSDB_TYPE_STRING);
-    vty_out(vty, "   %10ld collision  ",
+    vty_out(vty, "   %10" PRIi64 " collision  ",
             (index == UINT_MAX)? 0 : datum->values[index].integer);
     vty_out(vty, "%s", VTY_NEWLINE);
 
@@ -2757,7 +2758,7 @@ show_interface_status(struct vty *vty, const const struct ovsrec_interface *ifro
         }
         /* Display vlan mode and vid for an l2 interface */
         else if (port_row->vlan_tag != NULL && port_row->vlan_mode != NULL) {
-            vty_out(vty, "%-8ld", (int64_t)ops_port_get_tag(port_row)); /*vid */
+            vty_out(vty, "%-8d", ops_port_get_tag(port_row)); /*vid */
             vty_out(vty, "eth  "); /*type */
             if (strncmp(port_row->vlan_mode, OVSREC_PORT_VLAN_MODE_ACCESS,
                         strlen(OVSREC_PORT_VLAN_MODE_ACCESS)) == 0){
@@ -2921,9 +2922,9 @@ cli_show_interface_queue_stats (struct cmd_element *self, struct vty *vty,
         for (q=0; q<QOS_MAX_QUEUES; q++)
         {
             vty_out(vty, " Q%d", q);
-            vty_out(vty, "  %20ld", datum[0]->values[q].integer);
-            vty_out(vty, "  %20ld", datum[1]->values[q].integer);
-            vty_out(vty, "  %20ld", datum[2]->values[q].integer);
+            vty_out(vty, "  %20" PRIi64, datum[0]->values[q].integer);
+            vty_out(vty, "  %20" PRIi64, datum[1]->values[q].integer);
+            vty_out(vty, "  %20" PRIi64, datum[2]->values[q].integer);
             vty_out(vty, "%s", VTY_NEWLINE);
         }
         vty_out(vty, "%s", VTY_NEWLINE);
@@ -3105,7 +3106,7 @@ cli_show_interface_exec (struct cmd_element *self, struct vty *vty,
                 }
                 else
                 {
-                    vty_out(vty, " %-6ld", intVal/1000000);
+                    vty_out(vty, " %-6" PRIi64, intVal/1000000);
                 }
             }
             vty_out(vty, "   -- ");  /* Port channel */
@@ -3147,7 +3148,7 @@ cli_show_interface_exec (struct cmd_element *self, struct vty *vty,
                     intVal = atoi(INTERFACE_USER_CONFIG_MAP_MTU_DEFAULT);
                 }
 
-                vty_out(vty, " MTU %ld %s", intVal, VTY_NEWLINE);
+                vty_out(vty, " MTU %" PRIi64 " %s", intVal, VTY_NEWLINE);
 
                 cur_duplex = smap_get(&ifrow->user_config,
                                       INTERFACE_USER_CONFIG_MAP_DUPLEX);
@@ -3173,7 +3174,7 @@ cli_show_interface_exec (struct cmd_element *self, struct vty *vty,
                 {
                     intVal = datum->keys[0].integer;
                 }
-                vty_out(vty, " Speed %ld Mb/s %s",intVal/1000000 , VTY_NEWLINE);
+                vty_out(vty, " Speed %" PRIi64 " Mb/s %s",intVal/1000000 , VTY_NEWLINE);
 
                 cur_state = smap_get(&ifrow->user_config,
                                        INTERFACE_USER_CONFIG_MAP_AUTONEG);
@@ -4083,7 +4084,7 @@ cli_show_ip_interface_exec(const char *argv[], int argc,
             continue;
         }
 
-        vty_out(vty, " MTU %ld %s", intVal, VTY_NEWLINE);
+        vty_out(vty, " MTU %" PRIi64 " %s", intVal, VTY_NEWLINE);
 
         datum = ovsrec_interface_get_statistics(ifrow,
                 OVSDB_TYPE_STRING, OVSDB_TYPE_INTEGER);
